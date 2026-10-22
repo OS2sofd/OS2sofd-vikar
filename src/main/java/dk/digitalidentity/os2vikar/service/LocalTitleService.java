@@ -18,7 +18,11 @@ public class LocalTitleService {
 		return localTitleDao.findAll();
 	}
 	
-	public LocalTitle getById(long id) {
+	public LocalTitle getById(Long id) {
+		if (id == null) {
+			return null;
+		}
+
 		return localTitleDao.findByid(id);
 	}
 	

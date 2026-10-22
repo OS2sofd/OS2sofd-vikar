@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 @Retention(RetentionPolicy.RUNTIME)
-@PreAuthorize("hasRole('ROLE_SUBSTITUTE_ADMIN')")
+@PreAuthorize("hasRole('ROLE_SUBSTITUTE_ADMIN') OR hasRole('ROLE_LONGTERM_SUBSTITUTE_ADMIN')")
 public @interface RequireSubstituteAdminAccess {
 	
 }

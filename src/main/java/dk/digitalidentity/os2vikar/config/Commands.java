@@ -14,6 +14,9 @@ public class Commands {
 	public static final String ENABLE_ACCOUNT = "ENABLE_ACCOUNT";
 	public static final String UNLOCK_ACCOUNT = "UNLOCK_ACCOUNT";
 	public static final String SET_AUTHORIZATION_CODE = "SET_AUTHORIZATION_CODE";
+	public static final String UPDATE_OU_LOCATION = "UPDATE_OU_LOCATION";
+	
+	public static final String CREATE_AND_ASSOCIATE_ACCOUNT = "CREATE_AND_ASSOCIATE_ACCOUNT";
 	
 	private Commands() {
 		throw new IllegalStateException("Utility class");

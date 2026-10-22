@@ -20,7 +20,7 @@ public class CreateADAccountTask {
 	// every 10 minutes
 	@Scheduled(cron = "${vikar.ad.cron:0 0/10 * * * ?}")
 	public void execute() {
-		if (!config.isScheduledJobsEnabled()) {
+		if (!config.isScheduledJobsEnabled() || !config.getPreCreateAD().isEnabled()) {
 			return;
 		}
 

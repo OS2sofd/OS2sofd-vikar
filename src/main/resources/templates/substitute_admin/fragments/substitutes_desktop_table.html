@@ -1,4 +1,7 @@
 <th:block th:fragment="substitutesDesktopTable" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<th:block th:if="${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}">
+		<h3>Vikarer i mine enheder</h3>
+	</th:block>
 	<table class="table" id="desktopSubstitutes">
 		<thead>
 			<tr>
@@ -10,24 +13,45 @@
 			</tr>
 		</thead>
 	</table>
+
+	<th:block th:if="${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}">
+		<h3>Andre vikarer</h3>
+		<table class="table" id="desktopSubstitutesRest">
+			<thead>
+				<tr>
+					<th>Navn</th>
+					<th>Brugernavn</th>
+					<th>Arbejdssteder</th>
+					<th>Vikarbureau</th>
+					<th class="actionColumn">Handlinger</th>
+				</tr>
+			</thead>
+		</table>
+	</th:block>
 </th:block>
 
 <th:block th:fragment="substitutesDesktopTableScript" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
 	<script th:inline="javascript">
 		/*<![CDATA[*/
 
+		/*[+
+			var showAgency = [[${@OS2VikarConfiguration.ui.showAgencyOnSubstitute}]];
+			const splitSubstitutesByOrgUnits = [[${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}]];
+		+]*/
+
+
 		var desktopFragmentService;
 		$(document).ready(function() {
 			desktopFragmentService = new DesktopFragmentService();
 		});
-		
+
 		function DesktopFragmentService() {
-			this.init = function() {
-				var table = $('#desktopSubstitutes').DataTable({
+			this.buildTableOptions = function(ajaxUrl) {
+				return {
 					"destroy": true,
 					"ajax": {
 						"contentType": "application/json",
-						"url": "/rest/substituteadmin/substitutes/list/desktop",
+						"url": ajaxUrl,
 						"type": "POST",
 						"headers": {
 							"X-CSRF-TOKEN": token
@@ -60,6 +84,7 @@
 						},
 						{
 							"data": "agency",
+							"visible": showAgency,
 							"render": function (data, type, row, meta) {
 								if (data == null) {
 									return "";
@@ -91,7 +116,16 @@
 							"next" : "Næste"
 						}
 					}
-				});
+				};
+			}
+
+			this.init = function() {
+				const mineSuffix = splitSubstitutesByOrgUnits ? "/mine" : "";
+				$('#desktopSubstitutes').DataTable(this.buildTableOptions("/rest/substituteadmin/substitutes/list/desktop" + mineSuffix));
+
+				if (splitSubstitutesByOrgUnits) {
+					$('#desktopSubstitutesRest').DataTable(this.buildTableOptions("/rest/substituteadmin/substitutes/list/desktop/rest"));
+				}
 			}
 		}
 		/*]]>*/

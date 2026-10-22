@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'userPool')" />
+			<div th:replace="~{fragments/topbar :: topbar(page = 'userPool')}" />
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -54,9 +54,9 @@
 	    </div>
 	</div>
 
-	<div th:replace="fragments/footer :: scripts(datatables = true, checkbox = true)" />
-	<div th:replace="substitute_admin/fragments/substitutes_desktop_table :: substitutesDesktopTableScript" />
-	<div th:replace="substitute_admin/fragments/substitutes_mobile_table :: substitutesMobileTableScript" />
+	<div th:replace="~{fragments/footer :: scripts(datatables = true, checkbox = true)}" />
+	<div th:replace="~{substitute_admin/fragments/substitutes_desktop_table :: substitutesDesktopTableScript}" />
+	<div th:replace="~{substitute_admin/fragments/substitutes_mobile_table :: substitutesMobileTableScript}" />
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/

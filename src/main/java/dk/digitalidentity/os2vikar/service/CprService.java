@@ -3,6 +3,7 @@ package dk.digitalidentity.os2vikar.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -24,7 +25,8 @@ public class CprService {
 		}
 
 		if (!config.getCpr().isDev()) {
-			var restTemplate = new RestTemplate();
+			// TODO: rewrite to RestClient
+			RestTemplate restTemplate = new RestTemplate();
 
 			String cprResourceUrl = config.getCpr().getUrl();
 			if (!cprResourceUrl.endsWith("/")) {
@@ -47,6 +49,14 @@ public class CprService {
 				return result;
 			}
 			catch (RestClientException ex) {
+				if (ex instanceof HttpClientErrorException) {
+					if (((HttpClientErrorException) ex).getStatusCode().value() == 404) {
+						log.info("Failed to lookup: " + cpr.substring(0, 6) + "-XXXX does not exist in CPR");
+
+						return null;
+					}
+				}
+
 				log.warn("Failed to lookup: " + cpr.substring(0, 6) + "-XXXX", ex);
 
 				return null;

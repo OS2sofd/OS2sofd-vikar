@@ -1,4 +1,7 @@
 <th:block th:fragment="substitutesMobileTable" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<th:block th:if="${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}">
+		<h3>Vikarer i mine enheder</h3>
+	</th:block>
 	<table class="table" id="mobileSubstitutes">
 		<thead>
 			<tr>
@@ -9,6 +12,20 @@
 			</tr>
 		</thead>
 	</table>
+
+	<th:block th:if="${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}">
+		<h3>Andre vikarer</h3>
+		<table class="table" id="mobileSubstitutesRest">
+			<thead>
+				<tr>
+					<th hidden>Id</th>
+					<th>Navn</th>
+					<th class="vikar-landscape">Arbejdssted</th>
+					<th style="width: 30px !important;">Status</th>
+				</tr>
+			</thead>
+		</table>
+	</th:block>
 </th:block>
 
 <th:block th:fragment="substitutesMobileTableScript" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
@@ -18,20 +35,21 @@
 		/*[+
 			var baseUrl = [[@{/}]];
 			var mobileEditUrl = [[@{/substituteadmin/substitutes/}]];
+			const splitSubstitutesByOrgUnits = [[${@OS2VikarConfiguration.ui.splitSubstitutesByOrgUnits}]];
 		+]*/
-		
+
 		var mobileFragmentService;
 		$(document).ready(function() {
 			mobileFragmentService = new MobileFragmentService();
 		});
-		
+
 		function MobileFragmentService() {
-			this.init = function() {
-				var table = $('#mobileSubstitutes').DataTable({
+			this.buildTableOptions = function(ajaxUrl) {
+				return {
 					"destroy": true,
 					"ajax": {
 						"contentType": "application/json",
-						"url": "/rest/substituteadmin/substitutes/list/mobile",
+						"url": ajaxUrl,
 						"type": "POST",
 						"headers": {
 							"X-CSRF-TOKEN": token
@@ -91,13 +109,26 @@
 							"next" : "Næste"
 						}
 					}
-				});
+				};
+			}
+
+			this.init = function() {
+				const mineSuffix = splitSubstitutesByOrgUnits ? "/mine" : "";
+				$('#mobileSubstitutes').DataTable(this.buildTableOptions("/rest/substituteadmin/substitutes/list/mobile" + mineSuffix));
 
 				$('#mobileSubstitutes').DataTable().on("draw", function() {
 					mobileFragmentService.addColumnOnClickListener();
 				});
+
+				if (splitSubstitutesByOrgUnits) {
+					$('#mobileSubstitutesRest').DataTable(this.buildTableOptions("/rest/substituteadmin/substitutes/list/mobile/rest"));
+
+					$('#mobileSubstitutesRest').DataTable().on("draw", function() {
+						mobileFragmentService.addColumnOnClickListener();
+					});
+				}
 			}
-			
+
 			this.addColumnOnClickListener = function() {
 				$("td.clickable").on('click', function(event){
 					window.location.href = mobileEditUrl + $(this).siblings(".id").text() + "/edit";

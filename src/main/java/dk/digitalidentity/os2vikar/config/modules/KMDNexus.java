@@ -5,8 +5,11 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class Nexus {
+public class KMDNexus {
    	private boolean enabled = false;
-    private String syncUrl = "https://nexus.digital-identity.dk/api/reset/";
-    private String syncApiKey;
+
+	private String tokenUrl;
+	private String clientId;
+	private String clientSecret;
+	private String nexusBaseUrl;
 }

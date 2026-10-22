@@ -10,9 +10,9 @@ import org.springframework.stereotype.Component;
 
 import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
 import dk.digitalidentity.os2vikar.config.RoleConstants;
-import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
-import dk.digitalidentity.samlmodule.model.SamlLoginPostProcessor;
-import dk.digitalidentity.samlmodule.model.TokenUser;
+import dk.digitalidentity.saml.interfaces.SamlLoginPostProcessor;
+import dk.digitalidentity.saml.service.model.SamlGrantedAuthority;
+import dk.digitalidentity.saml.service.model.TokenUser;
 
 @Component
 public class RolePostProcesser implements SamlLoginPostProcessor {
@@ -30,7 +30,9 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 		List<SamlGrantedAuthority> newAuthorities = new ArrayList<>();
 
 		String substituteAdminRole = "ROLE_" + config.getSubstituteAdminRoleId();
+		String longtermSubstituteAdminRole = "ROLE_" + config.getLongtermSubstituteAdminRoleId();
 		String systemAdminRole = "ROLE_" + config.getSystemAdminRoleId();
+		String statisticsAdminRole = "ROLE_" + config.getStatisticsAdminRoleId();
 
 		for (Iterator<? extends SamlGrantedAuthority> iterator = tokenUser.getAuthorities().iterator(); iterator.hasNext();) {
 			SamlGrantedAuthority grantedAuthority = iterator.next();
@@ -38,13 +40,20 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 			if (substituteAdminRole.equals(grantedAuthority.getAuthority())) {
 				newAuthorities.add(new SamlGrantedAuthority(RoleConstants.SUBSTITUTE_ADMIN, grantedAuthority.getConstraints(), grantedAuthority.getScope()));
 			}
+			else if (longtermSubstituteAdminRole.equals(grantedAuthority.getAuthority())) {
+				newAuthorities.add(new SamlGrantedAuthority(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN, grantedAuthority.getConstraints(), grantedAuthority.getScope()));
+			}
 			else if (systemAdminRole.equals(grantedAuthority.getAuthority())) {
 				newAuthorities.add(new SamlGrantedAuthority(RoleConstants.SYSTEM_ADMIN, grantedAuthority.getConstraints(), grantedAuthority.getScope()));
+			}
+			else if (statisticsAdminRole.equals(grantedAuthority.getAuthority())) {
+				newAuthorities.add(new SamlGrantedAuthority(RoleConstants.STATISTICS_ADMIN, grantedAuthority.getConstraints(), grantedAuthority.getScope()));
 			}
 		}
 
 		if (config.isDev()) {
 			newAuthorities.add(new SamlGrantedAuthority(RoleConstants.SUBSTITUTE_ADMIN, new ArrayList<>(), null));
+			newAuthorities.add(new SamlGrantedAuthority(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN, new ArrayList<>(), null));
 			newAuthorities.add(new SamlGrantedAuthority(RoleConstants.SYSTEM_ADMIN, new ArrayList<>(), null));
 		}
 

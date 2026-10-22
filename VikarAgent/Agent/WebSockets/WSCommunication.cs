@@ -8,7 +8,7 @@ namespace OS2Vikar
 {
     public class WSCommunication
     {
-        private static string VERSION = "2.0.0";
+        private static string VERSION = "2.2.0";
 
         private WebSocket socket;
         private ADStub adStub;

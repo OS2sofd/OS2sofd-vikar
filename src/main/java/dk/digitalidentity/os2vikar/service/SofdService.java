@@ -1,19 +1,17 @@
 package dk.digitalidentity.os2vikar.service;
 
-import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
-
 import java.time.LocalDate;
 import java.util.Set;
+
+import org.apache.commons.io.IOUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
+
+import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -23,7 +21,7 @@ public class SofdService {
     private OS2VikarConfiguration config;
 
     @Autowired
-    private RestTemplate restTemplate;
+    private RestClient restClient;
 
     public record InSofdResult(boolean inSofd, boolean hasADUser, String ADUsername) {}
     private record SofdPerson(Set<SofdAffiliation> affiliations, Set<SofdUser> users){}
@@ -34,19 +32,38 @@ public class SofdService {
     		return new InSofdResult(false, false, null);
     	}
     	
-        HttpEntity<String> request = new HttpEntity<>(getHeaders(config.getSofd().getApiKey()));
         String query = "/api/v2/persons/byCpr/" + cpr;
 
-        try {
-            ResponseEntity<SofdPerson> response = restTemplate.exchange(config.getSofd().getBaseUrl() + query, HttpMethod.GET, request, SofdPerson.class);
-            if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
-                log.warn("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx, response=" + response.getBody());
-                return null;
-            }
+        try {        	
+            SofdPerson person = restClient
+            	.get()
+            	.uri(config.getSofd().getBaseUrl() + query)
+	            .header("ApiKey", config.getSofd().getApiKey())
+	            .retrieve()
+	            .onStatus(HttpStatusCode::is4xxClientError, (_, res) -> {
+	                throw new RestClientResponseException(
+	                        "Client error: " + res.getStatusCode() + " : " + IOUtils.readFully(res.getBody(), res.getBody().available()),
+	                        res.getStatusCode(),
+	                        res.getStatusText(),
+	                        null,
+	                        null,
+	                        null
+	                );
+	            })
+	            .onStatus(HttpStatusCode::is5xxServerError, (_, res) -> {
+	                throw new RestClientResponseException(
+	                        "Server error: " + res.getStatusCode() + " : " + IOUtils.readFully(res.getBody(), res.getBody().available()),
+	                        res.getStatusCode(),
+	                        res.getStatusText(),
+	                        null,
+	                        null,
+	                        null
+	                );
+	            })
+	            .body(SofdPerson.class);
+
 
             boolean hasActiveSofdAffiliation = false;
-            SofdPerson person = response.getBody();
-
             long affiliationCount = person.affiliations().stream().filter(a -> !a.masterId().equals(config.getSofd().getVikarMasterId()) && active(a)).count();
             if (affiliationCount > 0) {
                 hasActiveSofdAffiliation = true;
@@ -56,27 +73,20 @@ public class SofdService {
 
             return new InSofdResult(hasActiveSofdAffiliation, primeUser != null, primeUser != null ? primeUser.userId() : null);
         }
-        catch (Exception e) {
-        	if (e instanceof HttpClientErrorException) {
-        		HttpClientErrorException ex = (HttpClientErrorException) e;
-        		
-        		if (ex.getStatusCode().is4xxClientError() || ex.getStatusCode().is5xxServerError()) {
-        			if (ex.getRawStatusCode() == 404) {
-        				return new InSofdResult(false, false, null);
-        			}
-        				
-       				log.error("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx", ex);
-        		}
-        		else {
-            		log.warn("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx with code: ", ex.getStatusCode());
-        		}
-        	}
-        	else {
-        		log.error("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx", e);
-        	}
-        	
-            return null;
-        }
+        catch (RestClientResponseException ex) {
+    		if (ex.getStatusCode().is4xxClientError() || ex.getStatusCode().is5xxServerError()) {
+    			if (ex.getStatusCode().value() == 404) {
+    				return new InSofdResult(false, false, null);
+    			}
+
+   				log.error("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx", ex);
+    		}
+    		else {
+        		log.warn("Failed to fetch employee from sofd by cpr " + cpr.substring(0, 6) + "-xxxx with code: ", ex.getStatusCode());
+    		}
+    	}
+
+        return null;
     }
 
     private boolean active(SofdAffiliation affiliation) {
@@ -93,13 +103,5 @@ public class SofdService {
 
     private boolean notActiveAnymore(SofdAffiliation affiliation) {
         return (affiliation.stopDate() != null && (affiliation.stopDate().isBefore(LocalDate.now()) || affiliation.stopDate().equals(LocalDate.now())));
-    }
-
-    private HttpHeaders getHeaders(String apiKey) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("apiKey", apiKey);
-        headers.add("Content-Type", "application/json");
-
-        return headers;
     }
 }

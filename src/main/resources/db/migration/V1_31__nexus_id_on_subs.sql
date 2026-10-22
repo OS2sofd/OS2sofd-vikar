@@ -1,0 +1,2 @@
+ALTER TABLE substitute ADD COLUMN nexus_id VARCHAR(64) NULL;
+ALTER TABLE substitute ADD COLUMN nexus_error VARCHAR(255) NULL;

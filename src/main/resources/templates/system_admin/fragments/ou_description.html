@@ -46,6 +46,15 @@
 					</div>
 				</div>
 			</fieldset>
+			
+			<fieldset class="maxWorkingDays">
+				<div class="form-group row">
+					<label class="col-lg-2 control-label">Maksimal forudoprettelse af vikar (dage)</label>
+					<div class="col-lg-10">
+						<input th:field="${orgUnit.maxDaysInFuture}" class="form-control" type="number"/>
+					</div>
+				</div>
+			</fieldset>
 		</form>
 		
 		<br/>
@@ -80,6 +89,7 @@
 							<tr th:each="title : ${titles}">
 								<td th:text="${title.title}" />
 								<td>
+									<i th:unless="${title.global}" class="fa fa-pencil editable" th:attr="data-title=${title.title},data-id=${title.id},data-guids=${title.objectGuids}" aria-hidden="true" title="Rediger lokal arbejdstitel"></i> &nbsp;
 									<i th:unless="${title.global}" class="fa fa-times" aria-hidden="true" th:onClick="'titleService.deleteTitle(' + ${title.id} + ')'" title="Slet lokal arbejdstitel"></i>
 								</td>
 							</tr>
@@ -210,6 +220,7 @@
 			var baseUrl = [[@{/}]];
 		+]*/
 		
+		var chosenGuids = [];
 		var descriptionService, roleService, titleService, adGroupService, itSystemService, userRoleService;
 		$(document).ready(function() {
 			descriptionService = new DescriptionService();
@@ -241,8 +252,13 @@
 				$("#maxSubstituteWorkingDays").on('blur', function(event) {
 					descriptionService.setMaxWorkingDays($(this).val());
 				});
+
 				$("#defaultSubstituteWorkingDays").on('blur', function(event) {
 					descriptionService.setDefaultWorkingDays($(this).val());
+				});
+				
+				$("#maxDaysInFuture").on('blur', function(event) {
+					descriptionService.setMaxDaysInFuture($(this).val());
 				});
 				
 				roleService.init();
@@ -296,7 +312,7 @@
 	    			   },
 	    			   error: function(jQxhr, textStatus, errorThrown) {
 	    					if (jQxhr.responseText == null) {
-	    			   			toastr.error("Fejl! Kunne ikke gemme standard antal arbejdsdage");
+	    			   			toastr.error("Fejl! Kunne ikke gemme maksimal antal arbejdsdage");
 	    			   		} else {
 	    			   			toastr.error(jQxhr.responseText);
 	    			   		}
@@ -323,6 +339,27 @@
 	    			   		}
 	    			   }
 	    		});
+			}
+			
+			this.setMaxDaysInFuture = function(days) {
+				$.ajax({
+					   url: baseUrl + "rest/systemadmin/orgunits/" + $("#uuid").val() + "/maxDaysInFuture?days=" + days,
+					   headers: {
+					      'X-CSRF-TOKEN': token
+					   },
+					   type: 'post',
+
+					   success: function(data, textStatus, jQxhr) {
+						   toastr.success("Gemt!");
+					   },
+					   error: function(jQxhr, textStatus, errorThrown) {
+					   		if (jQxhr.responseText == null) {
+					   			toastr.error("Fejl! Kunne ikke gemme maksimal forudoprettelse");
+					   		} else {
+					   			toastr.error(jQxhr.responseText);
+					   		}
+					   }
+				});
 			}
 		}
 		
@@ -426,9 +463,85 @@
 							"next" : "Næste"
 						}
 					}
-				});	
+				});
+				
+				$(".editable").on("click", function() {
+					titleService.openEditModal(this);
+				});
+
+				// assign listeners again on page change
+				$('#groupTableLocal').on('draw.dt', function() {
+					$('.adGroupsTitle').off('ifChecked');
+					$('.adGroupsTitle').off('ifUnchecked');
+
+					// show selected
+					$(".adGroupsTitle").iCheck('uncheck');
+					for (const guid of chosenGuids) {
+						$("#groupLocal_" + guid).iCheck('check');
+					}
+
+					$('.adGroupsTitle').on('ifChecked', function(event) {
+						chosenGuids.push($(this).data("guid"));
+					});
+					
+					$('.adGroupsTitle').on('ifUnchecked', function(event){
+						var index = chosenGuids.indexOf($(this).data("guid"));
+						chosenGuids.splice(index, 1);
+					});
+				});
 			}
 			
+			this.openEditModal = function(elem) {
+				var id = $(elem).data("id");
+				var title = $(elem).data("title");
+
+				// when the guids are just plain numbers, this fails when using data(), as it casts it to a number, which cannot be split
+				var guidsString = $(elem).attr("data-guids");
+				var guids = [];
+				if (guidsString != null) {
+					guids = guidsString.split(",");
+				}
+
+				$("#editId").val(id);
+				$("#title").val(title);
+				$("#title").prop("readonly", true);
+				$("#addTitle").prop("hidden", true);
+				$("#editTitle").prop("hidden", false);
+
+				$("#modalAddTitle").modal("show");
+
+				var table = $('#groupTableLocal').DataTable({
+					"columns": [
+					    { "orderable": false,
+						  "searchable": false},
+						  null
+					  ],
+					"destroy" : true,
+					"pageLength" : 25,
+					"order": [ 1, 'asc' ],
+					"responsive" : true,
+					"autoWidth" : false,
+					"language" : {
+						"search" : "Søg",
+						"lengthMenu" : "_MENU_ grupper per side",
+						"info" : "Viser _START_ til _END_ af _TOTAL_ grupper",
+						"zeroRecords" : "Ingen data...",
+						"infoEmpty" : "",
+						"infoFiltered" : "(ud af _MAX_ grupper)",
+						"paginate" : {
+							"previous" : "Forrige",
+							"next" : "Næste"
+						}
+					}
+				});
+
+				$('.adGroupsTitle').iCheck('uncheck');
+				for (const guid of guids) {
+					$("#groupLocal_" + guid).iCheck('check');
+				}
+				chosenGuids = guids;
+			}
+
 			this.deleteTitle = function(id) {
 				swal({
                     html: true,
@@ -463,24 +576,64 @@
 			}
 			
 			this.openCreateModal = function() {
+				chosenGuids = [];
+				$("#editId").val("");
+				$("#title").val("");
+				$("#title").prop("readonly", false);
+				$("#addTitle").prop("hidden", false);
+				$("#editTitle").prop("hidden", true);
 				$("#modalAddTitle").modal("show");
 				$("#name").focus();
+
+				$('.adGroupsTitle').iCheck('uncheck');				
+				var table = $('#groupTableLocal').DataTable({
+					"columns": [
+					    { "orderable": false,
+						  "searchable": false},
+						  null
+					  ],
+					"destroy" : true,
+					"pageLength" : 25,
+					"order": [ 1, 'asc' ],
+					"responsive" : true,
+					"autoWidth" : false,
+					"language" : {
+						"search" : "Søg",
+						"lengthMenu" : "_MENU_ grupper per side",
+						"info" : "Viser _START_ til _END_ af _TOTAL_ grupper",
+						"zeroRecords" : "Ingen data...",
+						"infoEmpty" : "",
+						"infoFiltered" : "(ud af _MAX_ grupper)",
+						"paginate" : {
+							"previous" : "Forrige",
+							"next" : "Næste"
+						}
+					}
+				});
 			}
-			
+
 			this.save = function() {
+				var payload = {
+					id : $("#editId").val(),
+					title : $("#title").val(),
+					adGroupObjectGuids : chosenGuids
+				}
+
 				$.ajax({
-	    			   url: baseUrl + "rest/systemadmin/orgunits/" + $("#uuid").val() + "/localtitles/save?title=" + $("#title").val(),
+	    			   url: baseUrl + "rest/systemadmin/orgunits/" + $("#uuid").val() + "/localtitles/save",
 	    			   headers: {
 	    			      'X-CSRF-TOKEN': token
 	    			   },
 	    			   type: 'post',
+					   contentType: 'application/json',
+					   data: JSON.stringify(payload),
 	    			   
 	    			   success: function(data, textStatus, jQxhr) {
 	    				   $("#modalAddTitle").modal("hide");
 	    				   orgUnitService.loadDescription($("#uuid").val())
 	    			   },
 	    			   error: function(jQxhr, textStatus, errorThrown) {
-	    					toastr.error("Fejl! Kunne ikke gemme den globale arbejdstitel.");			    				      
+	    					toastr.error("Fejl! Kunne ikke gemme den lokale arbejdstitel.");			    				      
 	    			   }
 	    		});
 			}
@@ -513,11 +666,11 @@
 					}
 				});	
 				
-				$('.adGroups').on('ifChecked', function(event){
+				$('.adGroups').on('ifChecked', function(event) {
 					adGroupService.save(true, $(this).data("guid"));
 				});
 				
-				$('.adGroups').on('ifUnchecked', function(event){
+				$('.adGroups').on('ifUnchecked', function(event) {
 					adGroupService.save(false, $(this).data("guid"));
 				});
 
@@ -531,11 +684,11 @@
 					$('.adGroups').off('ifChecked');
 					$('.adGroups').off('ifUnchecked');
 
-					$('.adGroups').on('ifChecked', function(event){
+					$('.adGroups').on('ifChecked', function(event) {
 						adGroupService.save(true, $(this).data("guid"));
 					});
 
-					$('.adGroups').on('ifUnchecked', function(event){
+					$('.adGroups').on('ifUnchecked', function(event) {
 						adGroupService.save(false, $(this).data("guid"));
 					});
 				});

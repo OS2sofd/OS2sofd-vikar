@@ -1,0 +1,1 @@
+ALTER TABLE substitute ADD COLUMN workplaces_modified BOOLEAN NOT NULL DEFAULT 0;

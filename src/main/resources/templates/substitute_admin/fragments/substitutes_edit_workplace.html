@@ -31,7 +31,7 @@
 							<div class="form-group row">
 								<label class="col-lg-2 control-label">Start dato</label>
 								<div class="col-lg-5">
-									<input th:value="${workplace.start}" class="form-control date workplace" disabled="disabled">
+									<input id="editStart" th:value="${workplace.start}" class="form-control date workplace" disabled="disabled">
 								</div>
 							</div>
 						</fieldset>
@@ -41,6 +41,11 @@
 								<div class="col-lg-5">
 									<input id="editStop" th:value="${workplace.stop}" class="form-control date workplace">
 								</div>
+							</div>
+							<div class="col-lg-5" sec:authorize="hasRole('ROLE_LONGTERM_SUBSTITUTE_ADMIN')">
+								<span class="help-block" style="color: #1ab394; font-weight: bold;">
+									<i class="fa fa-info-circle"></i> Din rolle giver dig tilladelse til at sætte stop datoen uagtet almindelige regler.
+								</span>
 							</div>
 						</fieldset>
 						<fieldset th:if="${@OS2VikarConfiguration.getO365().isEnabled()}">
@@ -89,12 +94,14 @@
 				
 				//Baseret på at det er i dag + max dage ud i fremtiden.
 				var today = new Date();
-				$('#editStop').datepicker('setStartDate', today);
-				
-				var maxStopDate = new Date();
-				maxStopDate.setDate(maxStopDate.getDate() + parseInt(maxDays));
-				$('#editStop').datepicker('setEndDate', maxStopDate);
-				
+				var startDate = new Date($('#editStart').val());
+				var dpStartDate = today > startDate ? new Date(today) : new Date(startDate);				
+				var dpStopDate = today > startDate ? new Date(today) : new Date(startDate);
+				dpStopDate.setDate(dpStopDate.getDate() + parseInt(maxDays));
+
+				$('#editStop').datepicker('setStartDate', dpStartDate);
+				$('#editStop').datepicker('setEndDate', dpStopDate);
+
 				$('.i-checks').iCheck({
 					checkboxClass: 'icheckbox_square-green',
 					radioClass: 'iradio_square-green',

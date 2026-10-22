@@ -10,6 +10,9 @@ public class RoleCatalogConfiguration {
 	private String apiKey;
 	private boolean enabled = true;
 	
+	// new feature, enable to control roles with API calls to OS2rollekatalog
 	private boolean enabledForWorkplaces = false;
+	
+	// old feature, disabled everywhere except Roskilde
 	private boolean allowAutomaticUserRoles = false;
 }

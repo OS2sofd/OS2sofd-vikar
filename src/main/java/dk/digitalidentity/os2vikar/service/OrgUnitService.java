@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +33,19 @@ public class OrgUnitService {
 	public List<OrgUnit> getAll() {
 		return orgUnitDao.findAll();
 	}
-	
+
+	@Transactional
+	public List<OrgUnit> getAll(Consumer<OrgUnit> consumer) {
+		List<OrgUnit> orgunits = orgUnitDao.findAll();
+		
+		if (consumer != null) {
+			orgunits.forEach(consumer);
+		}
+
+		return orgunits;
+	}
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void deleteAll(List<OrgUnit> orgUnits) {
 		orgUnitDao.deleteAll(orgUnits);
 	}

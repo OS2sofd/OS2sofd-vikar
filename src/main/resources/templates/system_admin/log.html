@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'log')"></div>
+			<div th:replace="~{fragments/topbar :: topbar(page = 'log')}"></div>
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -12,10 +12,11 @@
                         <div class="ibox">
                             <div class="ibox-title">
                                 <h2><em class="fa fa-archive"></em> &nbsp; Log</h2>
-                                
-                                <div class="ibox-tools" sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
-	                                <a class="btn btn-primary" th:href="@{/substituteadmin/download/statistic}">Download vikarstatistik</a>
-	                            </div>
+
+								<div class="ibox-tools" sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
+								    <div id="download-logs" class="btn btn-primary">Download logs</div>
+									<a id="downloadLink" th:href="@{/systemadmin/auditlog/download}" style="display:none;"></em></a>
+								</div>
                             </div>
 		
                             <div class="ibox-content">
@@ -34,11 +35,11 @@
 									
 									<tfoot style="display: table-row-group">
 										<tr>
+											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
 											<td></td>
-											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
-											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
-											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
-											<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
 										</tr>
 									</tfoot>
 
@@ -54,7 +55,7 @@
 	    </div>
 	</div>
 	
-	<div th:replace="fragments/footer :: scripts(datatables = true)" />
+	<div th:replace="~{fragments/footer :: scripts(datatables = true)}" />
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/
@@ -63,9 +64,25 @@
 			var baseUrl = [[@{/}]];
 		+]*/
 		
+		var table;
 		var token = $("meta[name='_csrf']").attr("content");
 		$(document).ready(function() {
-			var table = $('#log').DataTable({
+			$('#download-logs').on('click', function() {
+				var a = document.getElementById("downloadLink");
+
+				let params = new URLSearchParams();
+
+				var searchResult = getColumnSearchParams();
+				params.append('searchDate', (searchResult[0]) ? searchResult[0] : '');
+				params.append('searchAdmin', (searchResult[1]) ? searchResult[1] : '');
+				params.append('searchSubstitute', (searchResult[2]) ? searchResult[2] : '');
+				params.append('searchEvent', (searchResult[3]) ? searchResult[3] : '');
+
+				a.search = params.toString();
+				a.click();
+			});
+			
+			table = $('#log').DataTable({
 				"destroy": true,
 				"ajax": {
 					"contentType": "application/json",
@@ -149,6 +166,16 @@
 			});
 		});
 		
+		function getColumnSearchParams() {
+		    var params = {};
+		    table.columns().every(function() {
+		        var search = this.search();
+		        if (search) {
+		            params[this.index()] = search;
+		        }
+		    });
+		    return params;
+		}
 
 		/*]]>*/
 	</script>

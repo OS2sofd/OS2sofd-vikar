@@ -22,6 +22,7 @@
 						<li sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
 							<a role="button" th:href="@{/systemadmin/orgunits}" th:class="${page == 'orgUnits'} ? 'navActive' : ''">Enheder</a>
 						</li>
+
 						<li sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
 							<a role="button" th:href="@{/systemadmin/titles}" th:class="${page == 'titles'} ? 'navActive' : ''">Arbejdstitler</a>
 						</li>
@@ -34,12 +35,19 @@
 						<li sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
 							<a role="button" th:href="@{/systemadmin/auditlog}" th:class="${page == 'log'} ? 'navActive' : ''">Log</a>
 						</li>
+
+						<li sec:authorize="hasRole('ROLE_SYSTEM_ADMIN') or hasRole('ROLE_STATISTICS_ADMIN')">
+							<a role="button" th:href="@{/systemadmin/statistics}" th:class="${page == 'statistic'} ? 'navActive' : ''">Statistik</a>
+						</li>
+						
 						<li sec:authorize="hasRole('ROLE_SUBSTITUTE_ADMIN')">
 							<a role="button" th:href="@{/substituteadmin/substitutes}" th:class="${page == 'substitutes'} ? 'navActive' : ''">Vikarer</a>
 						</li>
-						<li sec:authorize="hasRole('ROLE_SUBSTITUTE_ADMIN')">
+						
+						<li sec:authorize="hasRole('ROLE_SUBSTITUTE_ADMIN')" th:if="${@OS2VikarConfiguration.getUi().isShowAccountPool()}">
 							<a role="button" th:href="@{/substituteadmin/userpool}" th:class="${page == 'userPool'} ? 'navActive' : ''">Pulje af brugerkonti</a>
 						</li>
+						
 						<li sec:authorize="hasRole('ROLE_SYSTEM_ADMIN')">
 							<a role="button" th:href="@{/systemadmin/settings}" th:class="${page == 'settings'} ? 'navActive' : ''">Opsætning</a>
 						</li>
@@ -53,11 +61,11 @@
 						<li>
 							<a th:href="@{/userguide}">Brugervejledning</a>
 						</li>
-                        <li>
-                            <a th:href="@{/saml/logout}">
-                                <i class="fa fa-sign-out"></i> &nbsp; Log ud
-                            </a>
-                        </li>
+						<li>
+							<a th:href="@{'/saml' + ${@samlConfiguration.pages.logoutMetadataPath}}">
+								<i class="fa fa-sign-out"></i> &nbsp; Log ud
+							</a>
+						</li>
                     </ul>
                 </li>
             </ul>

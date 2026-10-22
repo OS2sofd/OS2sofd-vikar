@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'substitutes')"></div>
+			<div th:replace="~{fragments/topbar :: topbar(page = 'substitutes')}"></div>
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -15,11 +15,11 @@
                             </div>
 		
                             <div class="ibox-content">
-                            	<div th:replace="substitute_admin/fragments/substitute_form :: substituteForm(edit = false)"></div>
+                            	<div th:replace="~{substitute_admin/fragments/substitute_form :: substituteForm(edit = false)}"></div>
 								<br/>
 								<h3>Arbejdssted</h3>
 								<p>Her oprettes det første arbejdssted. Der kan senere oprettes flere på redigeringssiden.</p>
-								<div th:replace="substitute_admin/fragments/workplace_form :: workplaceForm"></div>
+								<div th:replace="~{substitute_admin/fragments/workplace_form :: workplaceForm}"></div>
 								<br/><hr/><br/>
 								<button class="btn btn-primary full-width" style="margin-bottom: 10px" onclick="substituteService.save();">Gem</button>
 								<a class="btn btn-danger full-width" th:href="@{/substituteadmin/substitutes}">Annuller</a>
@@ -39,12 +39,12 @@
 		}
 	</style>
 	
-	<div th:replace="substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnit"></div>
+	<div th:replace="~{substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnit}"></div>
 	
-	<div th:replace="fragments/footer :: scripts(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)"></div>
-	<div th:replace="substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnitScript"></div>
-	<div th:replace="substitute_admin/fragments/substitute_form :: substituteFormScript"></div>
-	<div th:replace="substitute_admin/fragments/workplace_form :: workplaceFormScript"></div>
+	<div th:replace="~{fragments/footer :: scripts(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)}"></div>
+	<div th:replace="~{substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnitScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/substitute_form :: substituteFormScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/workplace_form :: workplaceFormScript}"></div>
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/
@@ -52,13 +52,14 @@
 		    var url = [[@{/substituteadmin}]];
             var orgUnits = [[${orgUnits}]];
             var restUrl = [[@{/rest/substituteadmin}]];
-			var allowDoubleAccounts = [[${@OS2VikarConfiguration.isDoubleAccountsAllowed()}]];
+			var allowDoubleAccounts = [[${@OS2VikarConfiguration.isDoubleAccountsAllowed() or isAdmin}]];
 		+]*/
 		
 		var token = $("meta[name='_csrf']").attr("content");
 		var substituteService;
 		var chosenOUUuids = [];
 		var chosenOUNames = [];
+
 		$(document).ready(function() {
 			substituteService = new SubstituteService();
 		});

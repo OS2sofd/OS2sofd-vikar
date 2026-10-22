@@ -110,3 +110,30 @@ ul.workplaces {
     padding-left: 0px;
     margin-bottom: 0px;
 }
+
+.chart-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+}
+
+.chartContainer {
+	display: flex;
+	justify-content: center;
+	min-width: 0;
+	width:100%;
+}
+
+.chart-width-full {
+	grid-column: span 2;
+}
+
+.chartWrapper {
+	width:100%;
+	min-width: 20rem;
+}
+
+.chart-width-full > .chartWrapper {
+	max-width:80rem;
+	min-width: 30rem;
+}

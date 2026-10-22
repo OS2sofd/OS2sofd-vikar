@@ -32,7 +32,7 @@ public class UpdateOrgUnitsTask {
     		log.warn("No organisation - loading a full organisation!");
 
     		try {
-    			fkOrganisationService.updateOrgUnits();
+    			execute();
     		}
     		catch (Exception ex) {
     			log.error("Failed to load organisation", ex);
@@ -42,10 +42,22 @@ public class UpdateOrgUnitsTask {
 
     @Scheduled(cron = "${cron.fkorg:0 #{new java.util.Random().nextInt(55)} 13 * * ?}")
     public void execute() throws Exception {
-		if (!configuration.isScheduledJobsEnabled() || !configuration.getOrganisation().isEnabled()) {
+		if (!configuration.isScheduledJobsEnabled()) {
 			return;
 		}
 
-		fkOrganisationService.updateOrgUnits();
+		switch (configuration.getOrganisation().getSource()) {
+			case FK_ORGANISATION:
+				fkOrganisationService.updateOrgUnits();
+				break;
+			case NONE:
+				break;
+			case OMADA:
+				// do nothing, we handle this with incoming API calls from the OmadaAgent
+				break;
+			case OS2SOFD:
+				// not implemented yet - someone needs to order it :)
+				break;    				
+		}
     }
 }

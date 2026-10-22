@@ -6,6 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class PreCreateAD {
+	private boolean enabled = true;
 	private long createNumberWithLicense = 10;
 	private long createNumberWithoutLicense = 5;
 }

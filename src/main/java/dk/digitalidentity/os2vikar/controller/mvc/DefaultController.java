@@ -2,15 +2,12 @@ package dk.digitalidentity.os2vikar.controller.mvc;
 
 import java.util.Map;
 
-import javax.servlet.http.HttpServletRequest;
-
 import org.springframework.boot.web.error.ErrorAttributeOptions;
-import org.springframework.boot.web.servlet.error.DefaultErrorAttributes;
-import org.springframework.boot.web.servlet.error.ErrorAttributes;
-import org.springframework.boot.web.servlet.error.ErrorController;
+import org.springframework.boot.webmvc.error.DefaultErrorAttributes;
+import org.springframework.boot.webmvc.error.ErrorAttributes;
+import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.WebAttributes;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,12 +18,13 @@ import org.springframework.web.context.request.WebRequest;
 
 import dk.digitalidentity.os2vikar.config.RoleConstants;
 import dk.digitalidentity.os2vikar.security.SecurityUtil;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Controller
 public class DefaultController implements ErrorController {
 	private ErrorAttributes errorAttributes = new DefaultErrorAttributes();
 	
-	@GetMapping("/")
+	@GetMapping({ "/", "/ui/landingpage" })
 	public String defaultPage() {
 		if (!SecurityUtil.isUserLoggedIn()) {
 			return "index";
@@ -37,6 +35,9 @@ public class DefaultController implements ErrorController {
 			}
 			else if (SecurityUtil.hasRole(RoleConstants.SUBSTITUTE_ADMIN)){
 				return "redirect:/substituteadmin/substitutes";
+			}
+			else if (SecurityUtil.hasRole(RoleConstants.STATISTICS_ADMIN)){
+				return "redirect:/systemadmin/statistics";
 			}
 		}
 		
@@ -59,20 +60,16 @@ public class DefaultController implements ErrorController {
 			return "index";
 		}
 		
-		Object authException = request.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
+		Object exception = request.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
 
 		// handle the forward case
-		if (authException == null && request.getSession() != null) {
-			authException = request.getSession().getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
+		if (exception == null && request.getSession() != null) {
+			exception = request.getSession().getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
 		}
 
-		if (authException != null && authException instanceof Throwable) {
-			StringBuilder builder = new StringBuilder();
-			body.put("exception", builder.toString());
-
-			if (authException instanceof UsernameNotFoundException) {
-				String message = ((UsernameNotFoundException) authException).getMessage();
-				model.addAttribute("message", message);
+		if (exception != null && exception instanceof Exception authException) {
+			if (authException.getMessage() != null) {
+				model.addAttribute("message", authException.getMessage());
 			}
 		}
 

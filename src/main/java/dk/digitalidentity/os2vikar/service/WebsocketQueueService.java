@@ -50,11 +50,17 @@ public class WebsocketQueueService {
 						case Commands.SET_EXPIRE:
 							websockeService.getSocketHandler().setExpireWithoutRetry(queue.getTarget(), queue.getPayload());
 							break;
+						case Commands.UPDATE_OU_LOCATION:
+							websockeService.getSocketHandler().updateOrgUnitForEmployee(queue.getTarget(), queue.getPayload());
+							break;
 						case Commands.UPDATE_LICENSE:
 							websockeService.getSocketHandler().updateLicenseWithoutRetry(queue.getTarget(), "true".equals(queue.getPayload()));
 							break;
 						case Commands.UNLOCK_ACCOUNT:
 							websockeService.getSocketHandler().unlockAccountWithoutRetry(queue.getTarget());
+							break;
+						case Commands.ENABLE_ACCOUNT:
+							websockeService.getSocketHandler().enableAccountWithoutRetry(queue.getTarget());
 							break;
 						default:
 							log.error("Unknown command: " + queue.getCommand());

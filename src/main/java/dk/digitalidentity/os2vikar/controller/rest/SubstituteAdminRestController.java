@@ -12,9 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.Valid;
-
+import dk.digitalidentity.os2vikar.config.RoleConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.datatables.mapping.DataTablesInput;
 import org.springframework.data.jpa.datatables.mapping.DataTablesOutput;
@@ -50,12 +48,12 @@ import dk.digitalidentity.os2vikar.dao.model.UserRole;
 import dk.digitalidentity.os2vikar.dao.model.Workplace;
 import dk.digitalidentity.os2vikar.dao.model.WorkplaceAssignedRole;
 import dk.digitalidentity.os2vikar.dao.model.enums.ADAccountPoolStatus;
-import dk.digitalidentity.os2vikar.datatables.SubstituteDatatablesDao;
 import dk.digitalidentity.os2vikar.interceptors.AuditLogIntercepted;
 import dk.digitalidentity.os2vikar.interceptors.LogInterceptor;
 import dk.digitalidentity.os2vikar.security.RequireSubstituteAdminAccess;
 import dk.digitalidentity.os2vikar.security.SecurityUtil;
 import dk.digitalidentity.os2vikar.service.ADAccountPoolService;
+import dk.digitalidentity.os2vikar.service.AuditLogService;
 import dk.digitalidentity.os2vikar.service.AuthorizationCodeService;
 import dk.digitalidentity.os2vikar.service.CprService;
 import dk.digitalidentity.os2vikar.service.GlobalRoleService;
@@ -72,6 +70,10 @@ import dk.digitalidentity.os2vikar.service.WebSocketService;
 import dk.digitalidentity.os2vikar.service.dto.CprLookupDto;
 import dk.digitalidentity.os2vikar.service.model.ADResponse;
 import dk.digitalidentity.os2vikar.service.model.ADResponse.ADStatus;
+import dk.digitalidentity.os2vikar.service.model.SubstituteListScope;
+import dk.digitalidentity.os2vikar.service.nexus.KMDNexusService;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -125,10 +127,13 @@ public class SubstituteAdminRestController {
 	private AuthorizationCodeService authorizationCodeService;
 
 	@Autowired
-	private SubstituteDatatablesDao substituteDatatablesDao;
+	private StatisticService statisticService;
 	
 	@Autowired
-	private StatisticService statisticService;
+	private AuditLogService auditLogService;
+	
+	@Autowired
+	private KMDNexusService kmdNexusService;
 
 	@AuditLogIntercepted(operation = "CPR-opslag", args = { "cpr" })
 	@GetMapping("/rest/substituteadmin/substitutes/new/cprlookup/{cpr}")
@@ -154,7 +159,7 @@ public class SubstituteAdminRestController {
 		return new ResponseEntity<>(cprLookupDto, HttpStatus.OK);
 	}
 
-	@AuditLogIntercepted(operation = "Henter data fra enhed(er)", args = { "uuids" })
+//	@AuditLogIntercepted(operation = "Henter data fra enhed(er)", args = { "uuids" })
 	@GetMapping("/rest/substituteadmin/orgunits/oudata")
 	public ResponseEntity<?> getOUDataFromOUs(@RequestParam String uuids) {
 		List<OrgUnit> orgUnits = getOrgUnitsFromUuids(uuids);
@@ -172,12 +177,18 @@ public class SubstituteAdminRestController {
 		List<TitleDTO> titles = getTitles(orgUnits);
 		int maxDays = orgUnits.stream().mapToInt(o -> o.getMaxSubstituteWorkingDays()).max().orElse(1);
 		int defaultDays = orgUnits.stream().mapToInt(o -> o.getDefaultSubstituteWorkingDays()).min().orElse(1);
+		int maxFutureDays = orgUnits.stream().mapToInt(o -> o.getMaxDaysInFuture()).min().orElse(1);
+
+		if (SecurityUtil.hasRole(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN)) {
+			maxDays = 3650;
+		}
 
 		OUDataDTO ouData = new OUDataDTO();
 		ouData.setRoles(roles);
 		ouData.setTitles(titles);
 		ouData.setMaxDays(maxDays);
 		ouData.setDefaultDays(defaultDays);
+		ouData.setMaxFutureDays(maxFutureDays);
 
 		return new ResponseEntity<>(ouData, HttpStatus.OK);
 	}
@@ -325,7 +336,7 @@ public class SubstituteAdminRestController {
 		return true;
 	}
 
-	@AuditLogIntercepted(operation = "Opret vikar", args = { "dto" })
+//	@AuditLogIntercepted(operation = "Opret vikar", args = { "dto" })
 	@ResponseBody
 	@PostMapping("/rest/substituteadmin/substitutes/save")
 	public ResponseEntity<?> save(@RequestBody SubstituteWithPlaceDTO dto) {
@@ -398,7 +409,7 @@ public class SubstituteAdminRestController {
 
 		int maxDays = getMaxDays(orgUnits);
 		LocalDate maxStop = dto.getStart().plusDays(maxDays);
-		if (dto.getStop().isAfter(maxStop)) {
+		if (dto.getStop().isAfter(maxStop) && !SecurityUtil.hasRole(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN)) {
 			return new ResponseEntity<>("Den maksimale stopdato er overskredet", HttpStatus.BAD_REQUEST);
 		}
 		
@@ -406,11 +417,14 @@ public class SubstituteAdminRestController {
 			return new ResponseEntity<>("Der skal vælges en arbejdstitel", HttpStatus.BAD_REQUEST);
 		}
 
-		if (dto.isRequireO365License() && adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, true).isEmpty()) {
-			return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere med Office licens i puljen.", HttpStatus.BAD_REQUEST);
-		}
-		else if (!dto.isRequireO365License() && adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, false).isEmpty()) {
-			return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere uden Office licens i puljen.", HttpStatus.BAD_REQUEST);
+		// if we are using precreated accounts, verify that we have available accounts
+		if (config.getPreCreateAD().isEnabled()) {
+			if (dto.isRequireO365License() && adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, true).isEmpty()) {
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
+			}
+			else if (!dto.isRequireO365License() && adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, false).isEmpty()) {
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
+			}
 		}
 
 		// create substitute
@@ -422,6 +436,7 @@ public class SubstituteAdminRestController {
 		substitute.setAgency(dto.getAgency());
 		substitute.setPhone(dto.getPhone());
 		substitute.setAssignEmployeeSignature(dto.isAssignEmployeeSignature());
+		substitute.setWorkplacesModified(true);
 
 		// handle roles
 		List<GlobalRole> globalRoles = new ArrayList<>();
@@ -459,6 +474,7 @@ public class SubstituteAdminRestController {
 			workplace.setMasterId(UUID.randomUUID().toString());
 			workplace.setTitle(dto.getTitle());
 			workplace.setRequireO365License(dto.isRequireO365License());
+			workplace.setCreatedBy(SecurityUtil.getUser());
 
 			List<WorkplaceAssignedRole> assignedRoles = new ArrayList<>();
 			for (GlobalRole global : globalRoles) {
@@ -495,17 +511,16 @@ public class SubstituteAdminRestController {
 			substitute.setUsername(dto.getSofdADUserId());
 			substitute.setUsernameFromSofd(true);
 		}
-		else {
+		else if (config.getPreCreateAD().isEnabled()) {
 			ADAccountPool account = adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, dto.isRequireO365License()).stream().findFirst().orElse(null);
 			if (account == null) {
-				String word = dto.isRequireO365License()? "med" : "uden";
-
-				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere " + word + " Office licens i puljen.", HttpStatus.BAD_REQUEST);
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
 			}
 
 			ADResponse response = webSocketService.associateAccount(substitute, account.getUsername());
 			if (response.isSuccess() || response.getStatus().equals(ADStatus.TIMEOUT)) {
 				substitute.setUsername(account.getUsername());
+				substitute.setDisabledInAd(true);
 				substitute.setHasO365License(dto.isRequireO365License());
 				adAccountPoolService.delete(account);
 			}
@@ -516,13 +531,13 @@ public class SubstituteAdminRestController {
 
 				account = adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, dto.isRequireO365License()).stream().findFirst().orElse(null);
 				if (account == null) {
-					String word = dto.isRequireO365License()? "med" : "uden";
-					return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere " + word + " Office licens i puljen.", HttpStatus.BAD_REQUEST);
+					return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
 				}
 
 				response = webSocketService.associateAccount(substitute, account.getUsername());
 				if (response.isSuccess() || response.getStatus().equals(ADStatus.TIMEOUT)) {
 					substitute.setUsername(account.getUsername());
+					substitute.setDisabledInAd(true);
 					substitute.setHasO365License(dto.isRequireO365License());
 					adAccountPoolService.delete(account);
 				}
@@ -550,11 +565,28 @@ public class SubstituteAdminRestController {
 				}
 			}
 		}
+		else {
+			ADResponse response = webSocketService.createAndAssociateAccount(substitute);
+			if (response.isSuccess()) {
+				substitute.setUsername(response.getMessage());
+				substitute.setDisabledInAd(true);
+			}
+			else {
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Det var ikke muligt at oprette en AD konto.", HttpStatus.BAD_REQUEST);
+			}
+		}
 
 		substitute = substituteService.save(substitute);
 		logInterceptor.substituteHolder.set(substitute);
 
 		for (Workplace workplace : substitute.getWorkplaces()) {
+			auditLogService.createOrEditWorkplace(
+				"Opret et arbejdssted",
+				"Vikaren har fået oprettet arbejde som " + workplace.getTitle() + " i enheden " + workplace.getOrgUnit().getName() + " med startdato " + workplace.getStartDate().toString() + " og slutdato " + workplace.getStopDate().toString(),
+				substitute,
+				workplace.getStartDate().toString(),
+				workplace.getStopDate().toString());
+
 			statisticService.save(workplace);
 		}
 
@@ -573,6 +605,11 @@ public class SubstituteAdminRestController {
 					return new ResponseEntity<>("Vikaren er oprettet, men er stadig ved at blive medlem af de inddirekte tildelte Active Directory grupper. Du bliver dirigeret videre til listen af vikarer om lidt.", HttpStatus.OK);
 				}
 			}
+		}
+		
+		// handle sync to KMD Nexus
+		if (config.getKmdNexus().isEnabled()) {
+			kmdNexusService.syncOrgUnitAssignmentsDelta(substitute);
 		}
 
 		if (responseTimeout) {
@@ -604,6 +641,7 @@ public class SubstituteAdminRestController {
 		substitute.setAgency(dto.getAgency());
 		substitute.setPhone(dto.getPhone());
 		substitute.setAssignEmployeeSignature(dto.isAssignEmployeeSignature());
+		substitute.setWorkplacesModified(true);
 
 		if (StringUtils.hasText(dto.getAuthorizationCode()) && !Objects.equals(dto.getAuthorizationCode(), substitute.getAuthorizationCode())) {
 			ADResponse responseSetAuthorizationCode = webSocketService.setAuthorizationCode(substitute.getUsername(), dto.getAuthorizationCode());
@@ -631,7 +669,7 @@ public class SubstituteAdminRestController {
 		return new ResponseEntity<>(HttpStatus.OK);
 	}
 
-	@AuditLogIntercepted(operation = "Opret et eller flere nye arbejdssteder på vikar", args = { "dto" })
+//	@AuditLogIntercepted(operation = "Opret et eller flere nye arbejdssteder på vikar", args = { "dto" })
 	@ResponseBody
 	@PostMapping("/rest/substituteadmin/substitutes/edit/addworkplace")
 	public ResponseEntity<?> addWorkplaces(@RequestBody SubstituteWithPlaceDTO dto) {
@@ -655,7 +693,7 @@ public class SubstituteAdminRestController {
 
 		int maxDays = getMaxDays(orgUnits);
 		LocalDate maxStop = dto.getStart().plusDays(maxDays);
-		if (dto.getStop().isAfter(maxStop)) {
+		if (dto.getStop().isAfter(maxStop) && !SecurityUtil.hasRole(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN)) {
 			return new ResponseEntity<>("Den maksimale stopdato er overskredet", HttpStatus.BAD_REQUEST);
 		}
 		
@@ -674,7 +712,8 @@ public class SubstituteAdminRestController {
 			if (role.isGlobal()) {
 				globalRole = globalRoleService.getById(role.getId());
 				type = "global";
-			} else {
+			}
+			else {
 				localRole = localRoleService.getById(role.getId());
 				type = "lokal";
 			}
@@ -703,6 +742,7 @@ public class SubstituteAdminRestController {
 			workplace.setTitle(dto.getTitle());
 			workplace.setRequireO365License(dto.isRequireO365License());
 			workplace.setAssignedRoles(new ArrayList<>());
+			workplace.setCreatedBy(SecurityUtil.getUser());
 
 			List<WorkplaceAssignedRole> assignedRoles = new ArrayList<>();
 			for (GlobalRole global : globalRoles) {
@@ -739,18 +779,14 @@ public class SubstituteAdminRestController {
 		if (!response.isSuccess()) {
 			if (response.getStatus().equals(ADStatus.TIMEOUT)) {
 				log.warn("Timeout when setting expire on vikar with ID " + substitute.getId() + " assuming it went okay");
-				substitute.setDisabledInAd(false);
 			}
 			else if (response.getStatus().equals(ADStatus.FAILURE) && config.getWebsockets().isCheckStatusWhenSetExpire()) {
-				log.error("Failed to set expire on vikar with ID " + substitute.getId() + ". Account is closed, response = " + response.getStatus());
-				return new ResponseEntity<>(response.getMessage(), HttpStatus.BAD_REQUEST);
+				log.warn("Failed to set expire on vikar with ID " + substitute.getId() + ". Account is closed, response = " + response.getStatus());
+				return new ResponseEntity<>("Kontoen kan ikke reaktiveres", HttpStatus.BAD_REQUEST);
 			}
 			else {
 				log.error("Failed to set expire on vikar with ID " + substitute.getId() + ", response = " + response.getStatus());
 			}
-		}
-		else {
-			substitute.setDisabledInAd(false);
 		}
 
 		// the license might already be there, but we do not know for sure, so we force-update it
@@ -771,6 +807,7 @@ public class SubstituteAdminRestController {
 			substitute.setLatestStopDate(dto.getStop());
 		}
 		
+		substitute.setWorkplacesModified(true);
 		substitute = substituteService.save(substitute);
 		logInterceptor.substituteHolder.set(substitute);
 		
@@ -791,13 +828,25 @@ public class SubstituteAdminRestController {
 						reactivateUserNow = true;
 					}
 					
+					auditLogService.createOrEditWorkplace(
+						"Opret et arbejdssted",
+						"Vikaren har fået oprettet arbejde som " + workplace.getTitle() + " i enheden " + workplace.getOrgUnit().getName() + " med startdato " + workplace.getStartDate().toString() + " og slutdato " + workplace.getStopDate().toString(),
+						substitute,
+						workplace.getStartDate().toString(),
+						workplace.getStopDate().toString());
+					
 					statisticService.save(workplace);
 				}
 			}
 		}
 		
 		if (reactivateUserNow && substitute.isDisabledInAd()) {
-			if (webSocketService.enableADAccount(substitute.getUsername()).isSuccess()) {
+			if (substitute.isUsernameFromSofd()) {
+				// we do not attempt to modify SOFD users
+				substitute.setDisabledInAd(false);
+				substituteService.save(substitute);				
+			}
+			else if (webSocketService.enableADAccount(substitute.getUsername()).isSuccess()) {
 				substitute.setDisabledInAd(false);
 				substituteService.save(substitute);
 			}
@@ -817,6 +866,11 @@ public class SubstituteAdminRestController {
 				log.error("Adding substitute to indirectly assigned AD groups failed. Substitute " + substitute.getName() + " " + substitute.getSurname() + "(" + substitute.getUsername() + ").");
 				return new ResponseEntity<>("Arbejdsstedet er oprettet, men AD kontoen er muligvis ikke blevet reaktiveret korrekt, og er stadig ved at få synkroniseret de inddirekte tildelte AD grupper.", HttpStatus.OK);
 			}
+		}
+		
+		// handle sync to KMD Nexus
+		if (config.getKmdNexus().isEnabled()) {
+			kmdNexusService.syncOrgUnitAssignmentsDelta(substitute);
 		}
 
 		if (!response.isSuccess()) {
@@ -848,22 +902,26 @@ public class SubstituteAdminRestController {
 		if (!response.isSuccess()) {
 			log.error("Failed to set expire on vikar with ID " + substitute.getId());
 		}
-		else {
-			substitute.setDisabledInAd(false);
-		}
 		
+		substitute.setWorkplacesModified(true);
 		substituteService.save(substitute);
 		logInterceptor.substituteHolder.set(substitute);
 		
+		auditLogService.createOrEditWorkplace(
+			"Annuller et arbejdssted",
+			"Vikaren har fået annulleret arbejde som " + workplace.getTitle() + " i enheden " + workplace.getOrgUnit().getName(),
+			substitute,
+			null, null);
+
 		// update existing statistic with the new stop-date
 		statisticService.save(workplace);
 
 		return new ResponseEntity<>(HttpStatus.OK);
 	}
 
-	@AuditLogIntercepted(operation = "Rediger et arbejdssted stopdato eller om det skal have Office licens", args = { "substituteId", "id", "stop", "license" })
+//	@AuditLogIntercepted(operation = "Rediger et arbejdssted stopdato", args = { "substituteId", "id", "stop", "license" })
 	@PostMapping("/rest/substituteadmin/substitutes/{substituteId}/edit/workplaces/{id}/edit")
-	public ResponseEntity<?> addWorkplace(@PathVariable long substituteId, @PathVariable Long id, @RequestParam("stop") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate stop, @RequestParam("license") boolean license) {
+	public ResponseEntity<?> editWorkplace(@PathVariable long substituteId, @PathVariable Long id, @RequestParam("stop") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate stop, @RequestParam("license") boolean license) {
 		Substitute substitute = substituteService.getById(substituteId);
 
 		if (substitute == null) {
@@ -871,7 +929,6 @@ public class SubstituteAdminRestController {
 		}
 
 		Workplace workplace = substitute.getWorkplaces().stream().filter(w -> w.getId() == id).findAny().orElse(null);
-
 		if (workplace == null) {
 			return new ResponseEntity<>("Kunne ikke finde arbejdssted med id " + id, HttpStatus.BAD_REQUEST);
 		}
@@ -882,7 +939,7 @@ public class SubstituteAdminRestController {
 
 		int maxDays = workplace.getOrgUnit().getMaxSubstituteWorkingDays();
 		LocalDate maxStop = workplace.getStartDate().plusDays(maxDays);
-		if (stop.isAfter(maxStop)) {
+		if (stop.isAfter(maxStop) && !SecurityUtil.hasRole(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN)) {
 			return new ResponseEntity<>("Den maksimale stopdato er overskredet", HttpStatus.BAD_REQUEST);
 		}
 
@@ -892,17 +949,25 @@ public class SubstituteAdminRestController {
 			response = webSocketService.setExpire(substitute, false);
 
 			if (response.getStatus().equals(ADStatus.OK) || response.getStatus().equals(ADStatus.NOOP)) {
-				substitute.setDisabledInAd(false);
+				;
 			}
 		}
 		
 		workplace.setRequireO365License(license);
+		substitute.setWorkplacesModified(true);
 		substituteService.save(substitute);
 		logInterceptor.substituteHolder.set(substitute);
 
 		// update existing statistic with the new stop-date
 		statisticService.save(workplace);
 		
+		auditLogService.createOrEditWorkplace(
+			"Rediger et arbejdssted",
+			"Vikarens arbejde som " + workplace.getTitle() + " i enheden " + workplace.getOrgUnit().getName() + " er blevet forlænget til " + stop.toString(),
+			substitute,
+			workplace.getStartDate().toString(),
+			workplace.getStopDate().toString());
+
 		return new ResponseEntity<>(response == null || response.isSuccess(), HttpStatus.OK);
 	}
 
@@ -942,6 +1007,11 @@ public class SubstituteAdminRestController {
 
 	@PostMapping("/rest/substituteadmin/substitutes/list/{type}")
 	public DataTablesOutput<SubstituteDTO> adminEventLogsDataTable(@PathVariable String type, @Valid @RequestBody DataTablesInput input, BindingResult bindingResult) {
+		return substitutesDataTable(type, "all", input, bindingResult);
+	}
+
+	@PostMapping("/rest/substituteadmin/substitutes/list/{type}/{scope}")
+	public DataTablesOutput<SubstituteDTO> substitutesDataTable(@PathVariable String type, @PathVariable String scope, @Valid @RequestBody DataTablesInput input, BindingResult bindingResult) {
 		if (bindingResult.hasErrors()) {
 			DataTablesOutput<SubstituteDTO> error = new DataTablesOutput<>();
 			error.setError(bindingResult.toString());
@@ -949,7 +1019,13 @@ public class SubstituteAdminRestController {
 			return error;
 		}
 
-		return convertToDTO(substituteDatatablesDao.findAll(input), type);
+		SubstituteListScope listScope = switch (scope) {
+			case "mine" -> SubstituteListScope.MINE;
+			case "rest" -> SubstituteListScope.REST;
+			default -> SubstituteListScope.ALL;
+		};
+
+		return convertToDTO(substituteService.getSubstitutesDataTable(input, listScope), type);
 	}
 
 	@AuditLogIntercepted(operation = "Slet vikar fra OS2vikar", args = { "substituteId"})
@@ -1004,7 +1080,7 @@ public class SubstituteAdminRestController {
 		return new ResponseEntity<>((success) ? HttpStatus.OK : HttpStatus.BAD_REQUEST);
 	}
 
-	@AuditLogIntercepted(operation = "Kopier vikar med lukket konto og opret nyt arbejdssted", args = { "dto" })
+//	@AuditLogIntercepted(operation = "Kopier vikar med lukket konto og opret nyt arbejdssted", args = { "dto" })
 	@ResponseBody
 	@PostMapping("/rest/substituteadmin/substitutes/copy")
 	public ResponseEntity<?> copySubstitute(@RequestBody SubstituteWithPlaceDTO dto, HttpServletResponse httpResponse) {
@@ -1029,7 +1105,7 @@ public class SubstituteAdminRestController {
 
 		int maxDays = getMaxDays(orgUnits);
 		LocalDate maxStop = dto.getStart().plusDays(maxDays);
-		if (dto.getStop().isAfter(maxStop)) {
+		if (dto.getStop().isAfter(maxStop) && !SecurityUtil.hasRole(RoleConstants.LONGTERM_SUBSTITUTE_ADMIN)) {
 			return new ResponseEntity<>("Den maksimale stopdato er overskredet", HttpStatus.BAD_REQUEST);
 		}
 
@@ -1083,6 +1159,7 @@ public class SubstituteAdminRestController {
 			workplace.setMasterId(UUID.randomUUID().toString());
 			workplace.setTitle(dto.getTitle());
 			workplace.setRequireO365License(dto.isRequireO365License());
+			workplace.setCreatedBy(SecurityUtil.getUser());
 
 			List<WorkplaceAssignedRole> assignedRoles = new ArrayList<>();
 			for (GlobalRole global : globalRoles) {
@@ -1109,6 +1186,7 @@ public class SubstituteAdminRestController {
 			workplaces.add(workplace);
 		}
 
+		substitute.setWorkplacesModified(true);
 		substitute.setWorkplaces(workplaces);
 
 		if (substitute.getLatestStopDate() == null || dto.getStop().isAfter(substitute.getLatestStopDate())) {
@@ -1122,17 +1200,16 @@ public class SubstituteAdminRestController {
 			substitute.setUsername(dto.getSofdADUserId());
 			substitute.setUsernameFromSofd(true);
 		}
-		else {
+		else if (config.getPreCreateAD().isEnabled()) {
 			ADAccountPool account = adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, dto.isRequireO365License()).stream().findFirst().orElse(null);
 			if (account == null) {
-				String word = dto.isRequireO365License()? "med" : "uden";
-
-				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere " + word + " Office licens i puljen.", HttpStatus.BAD_REQUEST);
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
 			}
 
 			ADResponse response = webSocketService.associateAccount(substitute, account.getUsername());
 			if (response.isSuccess() || response.getStatus().equals(ADStatus.TIMEOUT)) {
 				substitute.setUsername(account.getUsername());
+				substitute.setDisabledInAd(true);
 				substitute.setHasO365License(dto.isRequireO365License());
 				adAccountPoolService.delete(account);
 			}
@@ -1143,8 +1220,7 @@ public class SubstituteAdminRestController {
 
 				account = adAccountPoolService.getByStatusAndWithO365License(ADAccountPoolStatus.OK, dto.isRequireO365License()).stream().findFirst().orElse(null);
 				if (account == null) {
-					String word = dto.isRequireO365License()? "med" : "uden";
-					return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere " + word + " Office licens i puljen.", HttpStatus.BAD_REQUEST);
+					return new ResponseEntity<>("Vikaren kan ikke oprettes. Der er ikke flere brugere i puljen.", HttpStatus.BAD_REQUEST);
 				}
 
 				response = webSocketService.associateAccount(substitute, account.getUsername());
@@ -1177,11 +1253,28 @@ public class SubstituteAdminRestController {
 				}
 			}
 		}
+		else {
+			ADResponse response = webSocketService.createAndAssociateAccount(substitute);
+			if (response.isSuccess()) {
+				substitute.setUsername(response.getMessage());
+				substitute.setDisabledInAd(true);
+			}
+			else {
+				return new ResponseEntity<>("Vikaren kan ikke oprettes. Det var ikke muligt at oprette en AD konto.", HttpStatus.BAD_REQUEST);
+			}
+		}
 
 		substitute = substituteService.save(substitute);
 		logInterceptor.substituteHolder.set(substitute);
 		
 		for (Workplace workplace : substitute.getWorkplaces()) {
+			auditLogService.createOrEditWorkplace(
+					"Opret et arbejdssted",
+					"Vikaren har fået oprettet arbejde som " + workplace.getTitle() + " i enheden " + workplace.getOrgUnit().getName() + " med startdato " + workplace.getStartDate().toString() + " og slutdato " + workplace.getStopDate().toString(),
+					substitute,
+					workplace.getStartDate().toString(),
+					workplace.getStopDate().toString());
+
 			statisticService.save(workplace);
 		}
 
@@ -1200,6 +1293,11 @@ public class SubstituteAdminRestController {
 					return new ResponseEntity<>("Vikaren er oprettet, men er stadig ved at blive medlem af de inddirekte tildelte Active Directory grupper. Du bliver dirigeret videre til listen af vikarer om lidt.", HttpStatus.OK);
 				}
 			}
+		}
+		
+		// handle sync to KMD Nexus
+		if (config.getKmdNexus().isEnabled()) {
+			kmdNexusService.syncOrgUnitAssignmentsDelta(substitute);
 		}
 
 		if (responseTimeout) {

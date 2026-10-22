@@ -7,13 +7,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpServletResponse;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.ModelAndView;
 
 import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
@@ -88,7 +88,8 @@ public class SubstituteAdminController {
 		
 		model.addAttribute("substituteForm", substituteForm);
 		model.addAttribute("allowedOrgUnits", finalAllowedOrgUnits);
-		
+		model.addAttribute("isAdmin", SecurityUtil.hasRole(RoleConstants.SUBSTITUTE_ADMIN));
+
 		return "substitute_admin/substitutes_new";
 	}
 
@@ -121,6 +122,18 @@ public class SubstituteAdminController {
 		substituteForm.setUsername(substitute.getUsername() == null ? "" : substitute.getUsername());
 		substituteForm.setAssignEmployeeSignature(substitute.isAssignEmployeeSignature());
 		substituteForm.setAuthorizationCode(substitute.getAuthorizationCode());
+		
+		if (config.getKmdNexus().isEnabled()) {
+			if (StringUtils.hasText(substitute.getNexusId())) {
+				substituteForm.setNexusStatus("Oprettet med ID: " + substitute.getNexusId());
+			}
+			else if (StringUtils.hasText(substitute.getNexusError())) {
+				substituteForm.setNexusStatus(substitute.getNexusError());
+			}
+			else {
+				substituteForm.setNexusStatus("Ikke oprettet endnu");
+			}
+		}
 
 		List<ConstraintITSystem> configConstraintITSystems = config.getConstraintITSystems();
 		List<OrgUnit> allowedOrgUnits = orgUnitService.getAllOrgUnitsUserIsAllowedToCreateSubstitutesOn();
@@ -131,7 +144,8 @@ public class SubstituteAdminController {
 		
 		model.addAttribute("substituteForm", substituteForm);
 		model.addAttribute("allowedOrgUnits", finalAllowedOrgUnits);
-		
+		model.addAttribute("isAdmin", SecurityUtil.hasRole(RoleConstants.SUBSTITUTE_ADMIN));
+
 		return "substitute_admin/substitutes_edit";
 	}
 	
@@ -201,18 +215,19 @@ public class SubstituteAdminController {
 	}
 	
 	@GetMapping("/substituteadmin/download/statistic")
-	public ModelAndView downloadOrgUnits(HttpServletResponse response) {
-		List<Statistic> statistics = statisticService.getAll();
+	public ModelAndView downloadOrgUnits(
+			@RequestParam(required = false) LocalDate fromDate,
+			@RequestParam(required = false) LocalDate toDate,
+			@RequestParam(required = false) List<String> includedOuUuids,
+			@RequestParam(required = false) List<String> includedUserIds
+	) {
+		List<Statistic> statistics = statisticService.getFilteredChartData(includedOuUuids, includedUserIds, fromDate, toDate);
 
 		Map<String, Object> model = new HashMap<>();
 		model.put("statistics", statistics);
 
-		response.setContentType("application/ms-excel");
-		response.setHeader("Content-Disposition", "attachment; filename=\"statistic.xlsx\"");
-
 		return new ModelAndView(new StatisticXlsView(), model);
 	}
-
 
 	private String findITSystemNames(OrgUnit orgUnit, List<ConstraintITSystem> configConstraintITSystems) {
 		List<String> names = new ArrayList<>();

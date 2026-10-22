@@ -1,0 +1,41 @@
+<div th:fragment="filter-options" class="additionalOptionsContainer row col-6">
+    <div class="col ">
+        <div class="mb-3">
+            <label class="control-label" th:for="${'fromDate'}">Fra dato</label>
+            <input th:id="${'fromDate'}" class="form-control datepicker fromDate" type="text"
+                   placeholder="Vælg fra-dato"/>
+        </div>
+        <div class="">
+            <label class="control-label" th:for="${'toDate'}">Til dato</label>
+            <input th:id="${'toDate'}" class="form-control datepicker toDate" type="text"
+                   placeholder="Vælg til-dato"/>
+        </div>
+    </div>
+
+    <div th:if="${selectableOus != null && !#lists.isEmpty(selectableOus)}" class="col">
+        <label class="control-label" th:for="${'oUSelect'}">Filtrér på afdeling</label>
+        <select multiple="multiple" class="form-control select2-multiple ouSelector"
+                th:id="${'oUSelect'}">
+            <option th:each="option : ${selectableOus}" th:value="${option.value}"
+                    th:text="${option.label}"></option>
+        </select>
+    </div>
+
+    <div th:if="${selectableUsers != null && !#lists.isEmpty(selectableUsers)}" class="col">
+        <label class="control-label" th:for="${'userSelect'}">Filtrér på opretter</label>
+        <select multiple="multiple" class="form-control select2-multiple userSelector"
+                th:id="${'userSelect'}">
+            <option th:each="option : ${selectableUsers}" th:value="${option.value}"
+                    th:text="${option.label}"></option>
+        </select>
+    </div>
+
+<!--    <div th:if="${selectableOus != null && !#lists.isEmpty(selectableDataFields)}"-->
+<!--         class="col">-->
+<!--        <label class="control-label" th:for="${chart.id+'_datafield'}">Vælg visning</label>-->
+<!--        <select class="form-control dataFieldSelector" th:id="${chart.id+'_datafield'}">-->
+<!--            <option th:each="option : ${chart.selectableDataFields}" th:value="${option.value}"-->
+<!--                    th:text="${option.label}"></option>-->
+<!--        </select>-->
+<!--    </div>-->
+</div>

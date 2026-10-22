@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
@@ -15,7 +16,6 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.AsyncResult;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -50,7 +50,7 @@ public class SocketHandler extends TextWebSocketHandler {
 	
 	@Autowired
 	private WebSocketsConfiguration configuration;
-
+	
 	// lazy to resolve the circular reference issue at bootup
 	@Lazy
 	@Autowired
@@ -67,6 +67,11 @@ public class SocketHandler extends TextWebSocketHandler {
 	}
 
 	@Async
+	public Future<ADResponse> updateOrgUnitForEmployee(String userId, String ouId) throws InterruptedException {
+		return internalUpdateOrgUnitForEmployee(userId, ouId, false);
+	}
+
+	@Async
 	public Future<ADResponse> handleGroupMemberships(String userId, List<String> guids) throws InterruptedException {
 		return internalHandleGroupMemberships(userId, guids.stream().collect(Collectors.joining(",")), true);
 	}
@@ -79,6 +84,25 @@ public class SocketHandler extends TextWebSocketHandler {
 	@Async
 	public Future<ADResponse> handleGroupMembershipsWithoutRetry(String userId, String payload) throws InterruptedException {
 		return internalHandleGroupMemberships(userId, payload, false);
+	}
+
+	private Future<ADResponse> internalUpdateOrgUnitForEmployee(String userId, String ouId, boolean retry) throws InterruptedException {
+		Request request = new Request();
+		request.setCommand(Commands.UPDATE_OU_LOCATION);
+		request.setTarget(userId);
+		request.setPayload(ouId);
+
+		ADResponse response = sendAndGet(request, "employeeOUs");
+
+		// in case of NO_CONNECTION, we do not attempt to hide that information, so the caller still needs
+		// to deal with that issue, even though we retry in 5 minutes to perform the same action. This also
+		// means that this approach to retrying should only be done on idempotent operations, where a retry
+		// would not have any ill effect
+		if (retry && response.getStatus().equals(ADStatus.NO_CONNECTION)) {
+			retryRequest(request);
+		}
+
+		return CompletableFuture.completedFuture(response);
 	}
 	
 	private Future<ADResponse> internalAddToEmployeeSignatureGroup(String userId, boolean retry) throws InterruptedException {
@@ -97,7 +121,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	private Future<ADResponse> internalHandleGroupMemberships(String userId, String groupGuids, boolean retry) throws InterruptedException {
@@ -117,7 +141,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	@Async
@@ -146,7 +170,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	@Async
@@ -175,7 +199,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 	
 	@Async
@@ -204,7 +228,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	@Async
@@ -223,10 +247,10 @@ public class SocketHandler extends TextWebSocketHandler {
 		request.setTarget(userId);
 		if (configuration.isCheckStatusWhenSetExpire()) {
 			request.setPayload(tts + "," + checkStatus + "," + cpr);
-		} else {
+		}
+		else {
 			request.setPayload(tts);
 		}
-
 
 		log.info("Set expire: userId=" + userId + ", tts=" + tts);
 
@@ -240,7 +264,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	@Async
@@ -269,7 +293,7 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	@Async
@@ -298,9 +322,23 @@ public class SocketHandler extends TextWebSocketHandler {
 			retryRequest(request);
 		}
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
+	@Async
+	public Future<ADResponse> createAndAssociateAccount(String name, String cpr, String tts, String ouUuid) throws InterruptedException {
+		Request request = new Request();
+		request.setCommand(Commands.CREATE_AND_ASSOCIATE_ACCOUNT);
+		request.setTarget(name);
+		request.setPayload(tts + ":" + cpr + ":" + ouUuid);
+
+		log.info("Associate Account: name=" + name + ", tts=" + tts, "ouUuid=" + ouUuid);
+		
+		ADResponse response = sendAndGet(request, "createAndAssociateAccount", 150); // wait up to 15 seconds for a response, as this can take a while due to multiple operations
+
+		return CompletableFuture.completedFuture(response);
+	}
+	
 	@Async
 	public Future<ADResponse> associateAccount(String userId, String name, String cpr, String tts) throws InterruptedException {
 		Request request = new Request();
@@ -312,7 +350,7 @@ public class SocketHandler extends TextWebSocketHandler {
 		
 		ADResponse response = sendAndGet(request, "associateAccount", 450); // wait up to 45 seconds for a response, as this can take a while due to office-365
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 	
 	@Async
@@ -324,7 +362,7 @@ public class SocketHandler extends TextWebSocketHandler {
 
 		ADResponse response = sendAndGet(request, "createAccount");
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 	
 	@Async
@@ -336,7 +374,7 @@ public class SocketHandler extends TextWebSocketHandler {
 
 		ADResponse response = sendAndGet(request, "setPassword");
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 	public void cleanupRequestResponse() {
@@ -384,7 +422,7 @@ public class SocketHandler extends TextWebSocketHandler {
 
 		ADResponse response = sendAndGet(request, "setAuthorizationCode");
 
-		return new AsyncResult<>(response);
+		return CompletableFuture.completedFuture(response);
 	}
 
 
@@ -425,7 +463,7 @@ public class SocketHandler extends TextWebSocketHandler {
 		}
 		else if (holder == null) {
 			log.error("Got response for unknown request: " + message);
-			return;			
+			return;
 		}
 		
 		Request inResponseTo = holder.getRequest();
@@ -454,8 +492,10 @@ public class SocketHandler extends TextWebSocketHandler {
 			case Commands.SET_PASSWORD:
 			case Commands.CREATE_ACCOUNT:
 			case Commands.ASSOCIATE_ACCOUNT:
+			case Commands.CREATE_AND_ASSOCIATE_ACCOUNT:
 			case Commands.UPDATE_LICENSE:
 			case Commands.SET_EXPIRE:
+			case Commands.UPDATE_OU_LOCATION:
 			case Commands.DELETE_ACCOUNT:
 			case Commands.DISABLE_ACCOUNT:
 			case Commands.ENABLE_ACCOUNT:
@@ -560,6 +600,7 @@ public class SocketHandler extends TextWebSocketHandler {
 		// do some centralized logging of errors
 		response = holder.getResponse();
 		if (!response.isSuccess()) {
+			
 			// if we got a timeout on create, the account might actually have been created successfully anyway
 			if ("createAccount".equals(operation) && response.getMessage() != null && response.getMessage().contains("The object already exists")) {
 				response.setStatus(ADStatus.OK);
@@ -569,6 +610,12 @@ public class SocketHandler extends TextWebSocketHandler {
 			}
 			else if ("handleADGroups".equals(operation) && response.getMessage() != null && response.getMessage().contains("Kunne ikke finde bruger med brugernavn")) {
 				response.setStatus(ADStatus.OK);
+			}
+			// special case, where the account is closed, and we have created a NEW account instead
+			else if (response.getMessage() != null && response.getMessage().contains("personen har fået en ny AD konto")) {
+				log.warn("Operation " + operation + " failed with status " + response.getStatus() + " and message = " + response.getMessage());
+				// nope, still an error - someone should look at this flow at some point
+				// response.setStatus(ADStatus.OK);
 			}
 			else {
 				log.error("Operation " + operation + " failed with status " + response.getStatus() + " and message = " + response.getMessage());
@@ -658,13 +705,16 @@ public class SocketHandler extends TextWebSocketHandler {
 				log.info("Create account for " + message.getTarget() + ": " + message.getStatus());
 				break;
 			case Commands.ASSOCIATE_ACCOUNT:
-				log.info("associate account for " + message.getTarget() + ": " + message.getStatus());
+				log.info("Associate account for " + message.getTarget() + ": " + message.getStatus());
 				break;
 			case Commands.UPDATE_LICENSE:
-				log.info("update license for " + message.getTarget() + ": " + message.getStatus());
+				log.info("Update license for " + message.getTarget() + ": " + message.getStatus());
 				break;
 			case Commands.SET_EXPIRE:
-				log.info("set expire for " + message.getTarget() + ": " + message.getStatus());
+				log.info("Set expire for " + message.getTarget() + ": " + message.getStatus());
+				break;
+			case Commands.UPDATE_OU_LOCATION:
+				log.info("Updating OUs for " + message.getTarget() + ": " + message.getStatus());
 				break;
 			case Commands.DELETE_ACCOUNT:
 				log.info("Delete account " + message.getTarget() + ": " + message.getStatus());
@@ -686,6 +736,9 @@ public class SocketHandler extends TextWebSocketHandler {
 				break;
 			case Commands.SET_AUTHORIZATION_CODE:
 				log.info("Set Authorization Code " + message.getTarget() + ": " + message.getStatus());
+				break;
+			case Commands.CREATE_AND_ASSOCIATE_ACCOUNT:
+				log.info("Creating and associating account " + message.getTarget() + ": " + message.getStatus());
 				break;
 			default:
 				log.error("Unknown response command: " + message.getCommand());

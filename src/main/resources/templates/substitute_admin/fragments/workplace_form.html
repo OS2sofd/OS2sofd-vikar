@@ -35,6 +35,11 @@
 				<div class="col-lg-5">
 					<input id="stop" name="stop" class="form-control date workplace" disabled="disabled">
 				</div>
+				<div class="col-lg-5" sec:authorize="hasRole('ROLE_LONGTERM_SUBSTITUTE_ADMIN')">
+					<span class="help-block" style="color: #1ab394; font-weight: bold;">
+						<i class="fa fa-info-circle"></i> Din rolle giver dig tilladelse til at sætte stop datoen uagtet almindelige regler.
+					</span>
+				</div>
 			</div>
 		</fieldset>
 		<fieldset th:if="${@OS2VikarConfiguration.getO365().isEnabled()}">
@@ -158,19 +163,24 @@
 									$("#requireO365License").parent().removeClass("disabled");
 								}
 								
-								// handle days
-								days = response.maxDays;
+								// handle stop-date
+								var days = response.maxDays - 1;
 								var dateSplit = start.split("-");
 								var newStart = dateSplit[0] + "/" + dateSplit[1] + "/" + dateSplit[2];
 								var startAsDate = new Date(newStart);
 								var maxStopDate = new Date(newStart);
 								var curStopDate = new Date(newStart);
-								curStopDate.setDate(curStopDate.getDate() + response.defaultDays);
+								curStopDate.setDate(curStopDate.getDate() + (response.defaultDays - 1));
 								maxStopDate.setDate(maxStopDate.getDate() + days);
-
 								$('#stop').datepicker('setStartDate', startAsDate);
 								$('#stop').datepicker('setEndDate', maxStopDate);
 								$("#stop").datepicker('setDate', curStopDate);
+
+								// handle start-date
+								var maxStartDate = new Date();
+								maxStartDate.setDate(maxStartDate.getDate() + response.maxFutureDays);
+								$('#start').datepicker('setEndDate', maxStartDate);
+								
 								$("#roles").prop('disabled', false);
 								$("#stop").prop('disabled', false);
 							},

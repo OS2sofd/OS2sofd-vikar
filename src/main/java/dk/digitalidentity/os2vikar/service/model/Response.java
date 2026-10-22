@@ -35,7 +35,9 @@ public class Response {
 			case Commands.SET_PASSWORD:
 			case Commands.CREATE_ACCOUNT:
 			case Commands.ASSOCIATE_ACCOUNT:
+			case Commands.CREATE_AND_ASSOCIATE_ACCOUNT:
 			case Commands.SET_EXPIRE:
+			case Commands.UPDATE_OU_LOCATION:
 			case Commands.UPDATE_LICENSE:
 			case Commands.DELETE_ACCOUNT:
 			case Commands.DISABLE_ACCOUNT:

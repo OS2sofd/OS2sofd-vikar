@@ -6,8 +6,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import javax.transaction.Transactional;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -16,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
@@ -41,6 +40,7 @@ public class RoleCatalogueService {
 	public boolean assignUserRoleToUser(long userRoleId, String userUuid) {
 		log.info("Assigning " + userRoleId + " to " + userUuid);
 		
+		// TODO: rewrite to RestClient
 		RestTemplate restTemplate = new RestTemplate();
 
 		HttpHeaders headers = getHeaders();
@@ -83,7 +83,7 @@ public class RoleCatalogueService {
 		return false;
 	}
 
-	@Transactional(rollbackOn = Exception.class)
+	@Transactional
 	public void syncData() {
 		int updated = 0, created = 0, deleted = 0;
 

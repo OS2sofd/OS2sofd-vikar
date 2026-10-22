@@ -18,7 +18,11 @@ public class GlobalTitleService {
 		return globalTitleDao.findAll();
 	}
 	
-	public GlobalTitle getById(long id) {
+	public GlobalTitle getById(Long id) {
+		if (id == null) {
+			return null;
+		}
+
 		return globalTitleDao.findByid(id);
 	}
 	

@@ -10,6 +10,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.jpa.datatables.mapping.DataTablesInput;
+import org.springframework.data.jpa.datatables.mapping.DataTablesOutput;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -17,11 +20,17 @@ import org.springframework.util.StringUtils;
 import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
 import dk.digitalidentity.os2vikar.dao.SubstituteDao;
 import dk.digitalidentity.os2vikar.dao.model.GlobalTitleADGroupMapping;
+import dk.digitalidentity.os2vikar.dao.model.LocalTitle;
+import dk.digitalidentity.os2vikar.dao.model.LocalTitleADGroupMapping;
 import dk.digitalidentity.os2vikar.dao.model.Substitute;
 import dk.digitalidentity.os2vikar.dao.model.Workplace;
 import dk.digitalidentity.os2vikar.dao.model.WorkplaceAssignedRole;
+import dk.digitalidentity.os2vikar.dao.model.specification.SubstituteSpecification;
+import dk.digitalidentity.os2vikar.datatables.SubstituteDatatablesDao;
+import dk.digitalidentity.os2vikar.security.SecurityUtil;
 import dk.digitalidentity.os2vikar.service.dto.DeleteAfterPeriod;
 import dk.digitalidentity.os2vikar.service.model.ADResponse;
+import dk.digitalidentity.os2vikar.service.model.SubstituteListScope;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -30,10 +39,10 @@ public class SubstituteService {
 
 	@Autowired
 	private SubstituteDao substituteDao;
-	
+
 	@Autowired
 	private RoleCatalogueService roleCatalogService;
-	
+
 	@Autowired
 	private WebSocketService webSocketService;
 
@@ -49,10 +58,34 @@ public class SubstituteService {
 	@Autowired
 	private OS2VikarConfiguration configuration;
 
+	@Autowired
+	private SubstituteDatatablesDao substituteDatatablesDao;
+
+	@Autowired
+	private OrgUnitService orgUnitService;
+
 	public List<Substitute> getAll() {
 		return substituteDao.findAll();
 	}
-	
+
+	public DataTablesOutput<Substitute> getSubstitutesDataTable(DataTablesInput input, SubstituteListScope scope) {
+		if (scope == SubstituteListScope.ALL) {
+			return substituteDatatablesDao.findAll(input);
+		}
+
+		Set<String> constraintOrgUnitUuids = SecurityUtil.getOrgUnitUuidsFromConstraint(configuration.getConstraintOrgUnitIdentifier());
+		Set<String> orgUnitUuids = constraintOrgUnitUuids.isEmpty()
+				? constraintOrgUnitUuids
+				: new HashSet<>(orgUnitService.getAllUuidsWithChildren(new ArrayList<>(constraintOrgUnitUuids)));
+
+		Specification<Substitute> specification = scope == SubstituteListScope.MINE
+				? SubstituteSpecification.hasWorkplaceInOrgUnits(orgUnitUuids)
+				: SubstituteSpecification.hasNoWorkplaceInOrgUnits(orgUnitUuids);
+
+		return substituteDatatablesDao.findAll(input, specification);
+	}
+
+
 	public List<Substitute> getWithUncheckedAuthorizationCodes() {
 		return substituteDao.findByAuthorizationCodeCheckedFalse();
 	}
@@ -102,25 +135,87 @@ public class SubstituteService {
 
 	public ADResponse syncADGroups(Substitute substitute) {
 		List<GlobalTitleADGroupMapping> titleMappings = globalTitleADGroupMappingService.getAll();
+		
 		return syncADGroups(substitute, titleMappings);
 	}
 
-	public ADResponse syncADGroups(Substitute substitute, List<GlobalTitleADGroupMapping> titleMappings) {
-		Set<String> guids = new HashSet<>();
+	public boolean fillActiveWorkplaces(Substitute substitute, List<Workplace> workplaces) {
+		boolean stoppedYesterday = false;
+
 		for (Workplace workplace : substitute.getWorkplaces()) {
+			// skip future assignments, they will get assigned on the day, not before
+			if (workplace.getStartDate().isAfter(LocalDate.now())) {
+				continue;
+			}
+
 			if (workplace.getStopDate().isBefore(LocalDate.now())) {
+
+				// if the substitute has a workplace that stopped yesterday,
+				// our caller may need to know about this, to perform a cleanup
+				if (workplace.getStopDate().equals(LocalDate.now().minusDays(1))) {
+					stoppedYesterday = true;
+				}
 
 				// skip if stopped
 				continue;
 			}
+			
+			workplaces.add(workplace);
+		}
+		
+		return stoppedYesterday;
+	}
+
+	public ADResponse syncADGroups(Substitute substitute, List<GlobalTitleADGroupMapping> titleMappings) {
+		Set<String> guids = new HashSet<>();
+		
+		List<Workplace> activeWorkplaces = new ArrayList<>();
+		boolean force = fillActiveWorkplaces(substitute, activeWorkplaces);
+		for (Workplace workplace : activeWorkplaces) {
+			List<LocalTitleADGroupMapping> localTitleMappings = new ArrayList<LocalTitleADGroupMapping>();
+
+			for (LocalTitle localTitle : workplace.getOrgUnit().getLocalTitles()) {
+				if (localTitle.getAdGroups() != null && localTitle.getAdGroups().size() > 0) {
+					localTitleMappings.addAll(localTitle.getAdGroups());
+				}
+			}
 
 			guids.addAll(workplace.getOrgUnit().getAdGroups().stream().map(g -> g.getAdGroup().getObjectGuid()).collect(Collectors.toList()));
 
-			List<GlobalTitleADGroupMapping> mappingsForTitle = titleMappings.stream().filter(m -> m.getGlobalTitle().getTitle().equals(workplace.getTitle())).collect(Collectors.toList());
-			guids.addAll(mappingsForTitle.stream().map(m -> m.getAdGroup().getObjectGuid()).collect(Collectors.toList()));
+			if (titleMappings != null && titleMappings.size() > 0) {
+				List<GlobalTitleADGroupMapping> mappingsForTitle = titleMappings.stream().filter(m -> m.getGlobalTitle().getTitle().equals(workplace.getTitle())).collect(Collectors.toList());
+				guids.addAll(mappingsForTitle.stream().map(m -> m.getAdGroup().getObjectGuid()).collect(Collectors.toList()));
+			}
+
+			if (localTitleMappings.size() > 0) {
+				List<LocalTitleADGroupMapping> mappingsForTitle = localTitleMappings.stream().filter(m -> m.getLocalTitle().getTitle().equals(workplace.getTitle())).collect(Collectors.toList());
+				guids.addAll(mappingsForTitle.stream().map(m -> m.getAdGroup().getObjectGuid()).collect(Collectors.toList()));
+			}
 		}
 
-		return webSocketService.handleGroupMemberships(substitute, new ArrayList<>(guids));
+		log.info("AD_GROUPS_SYNC for " + substitute.getUsername() + " : " + String.join(", ", guids));
+		
+		return webSocketService.handleGroupMemberships(substitute, new ArrayList<>(guids), force);
+	}
+
+	@Transactional
+	public List<Substitute> getSubstitutesForOUSync(boolean fullSync) {
+		List<Substitute> substitutes = null;
+		
+		// TODO: read everything using consumers
+		if (fullSync) {
+			substitutes = substituteDao.findAll();
+		}
+		else {
+			substitutes = substituteDao.findByWorkplacesModifiedTrue();
+		}
+
+		return substitutes;
+	}
+
+	@Transactional
+	public void clearWorkplacesModified(Set<Long> ids) {
+		substituteDao.clearWorkplacesModified(ids);
 	}
 
 	@Transactional
@@ -409,5 +504,13 @@ public class SubstituteService {
 				log.warn("Nightly synchronisation of AD groups failed for substitute with userId " + substitute.getUsername() + " and uuid " + substitute.getUuid());
 			}
 		}
+	}
+
+	public List<Substitute> getAllWithoutNexusId() {
+		return substituteDao.findByNexusIdIsNull();
+	}
+
+	public List<Substitute> getAllWithNexusId() {
+		return substituteDao.findByNexusIdIsNotNull();
 	}
 }

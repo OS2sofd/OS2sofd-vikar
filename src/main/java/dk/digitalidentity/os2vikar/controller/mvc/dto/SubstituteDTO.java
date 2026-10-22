@@ -37,7 +37,8 @@ public class SubstituteDTO {
 		List<Workplace> activeWorkplaces = substitute.getWorkplaces()
 				.stream()
 				.filter(w -> (w.getStartDate().equals(nowStart) || w.getStartDate().isBefore(nowStart)) &&
-							 (w.getStopDate().equals(nowStop) || w.getStopDate().isAfter(nowStop)))
+							 (w.getStopDate().equals(nowStop) || w.getStopDate().isAfter(nowStop)) &&
+							 (!w.getStopDate().isBefore(w.getStartDate())))
 				.collect(Collectors.toList());
 
 		StringBuilder stringBuilder = new StringBuilder();

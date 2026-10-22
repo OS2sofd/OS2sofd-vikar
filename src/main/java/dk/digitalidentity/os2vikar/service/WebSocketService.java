@@ -1,6 +1,7 @@
 package dk.digitalidentity.os2vikar.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Future;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,6 +107,50 @@ public class WebSocketService {
 		return response;
 	}
 	
+	public ADResponse createAndAssociateAccount(Substitute substitute) {
+		ADResponse response = new ADResponse();
+		response.setStatus(ADStatus.FAILURE);
+
+		if (substitute.isUsernameFromSofd()) {
+			response.setStatus(ADStatus.OK);
+			return response;
+		}
+
+		String tts = SubstituteService.getExpireTime(substitute);
+		String name = substitute.getName() + " " + substitute.getSurname();
+		String cpr = substitute.getCpr();
+
+		Optional<String> orgUnitUuid = substitute.getWorkplaces().stream()
+				.map(workplace -> workplace.getOrgUnit().getUuid())
+				.findAny();
+		if (orgUnitUuid.isEmpty()) {
+			response.setMessage("Middleware: Ingen OU tilknyttet vikar ID " + substitute.getId());
+			return response;
+		}
+
+		if (configuration.getWebsockets().isEncodedCpr()) {
+            long val = Long.parseLong(cpr);
+
+            val++;
+            val *= 33;
+            
+            cpr = Long.toString(val);
+		}
+
+		try {
+			Future<ADResponse> result = socketHandler.createAndAssociateAccount(name, cpr, tts, orgUnitUuid.get());
+
+			return result.get();
+		}
+		catch (Exception ex) {
+			log.error("Failed to create and associcate account for " + substitute.getName() + " / " + substitute.getId(), ex);
+			
+			response.setMessage("Middleware: Teknisk fejl. " + ex.getMessage());
+		}
+		
+		return response;
+	}
+	
 	public ADResponse updateLicense(Substitute substitute, boolean shouldHaveLicense) {
 		ADResponse response = new ADResponse();
 		response.setStatus(ADStatus.FAILURE);
@@ -135,7 +180,32 @@ public class WebSocketService {
 
 		return response;
 	}
-	
+
+	public ADResponse updateOrgUnitForEmployee(Substitute substitute, String ouId) {
+		ADResponse response = new ADResponse();
+		response.setStatus(ADStatus.FAILURE);
+
+		String userId = substitute.getUsername();
+		
+		if (!StringUtils.hasLength(userId)) {
+			response.setMessage("Middleware: Ingen AD brugerkonto for vikar ID " + substitute.getId());			
+		}
+		else {
+			try {
+				Future<ADResponse> result = socketHandler.updateOrgUnitForEmployee(userId, ouId);
+				
+				return result.get();
+			}
+			catch (Exception ex) {
+				log.error("Failed to update OUs for " + userId, ex);
+
+				response.setMessage("Middleware: Teknisk fejl. " + ex.getMessage());
+			}
+		}
+
+		return response;
+	}
+
 	public ADResponse setExpire(Substitute substitute, boolean checkStatus) {
 		ADResponse response = new ADResponse();
 		response.setStatus(ADStatus.FAILURE);
@@ -284,11 +354,11 @@ public class WebSocketService {
 		return response;
     }
 
-	public ADResponse handleGroupMemberships(Substitute substitute, List<String> guids) {
+	public ADResponse handleGroupMemberships(Substitute substitute, List<String> guids, boolean force) {
 		ADResponse response = new ADResponse();
 		response.setStatus(ADStatus.FAILURE);
 
-		if (substitute.isUsernameFromSofd() || guids.isEmpty()) {
+		if (substitute.isUsernameFromSofd() || (guids.isEmpty() && !force)) {
 			response.setStatus(ADStatus.OK);
 			return response;
 		}

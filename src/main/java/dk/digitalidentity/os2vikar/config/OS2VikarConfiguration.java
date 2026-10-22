@@ -1,24 +1,26 @@
 package dk.digitalidentity.os2vikar.config;
 
-import dk.digitalidentity.os2vikar.config.modules.ConstraintITSystem;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import dk.digitalidentity.os2vikar.config.modules.Api;
+import dk.digitalidentity.os2vikar.config.modules.ConstraintITSystem;
 import dk.digitalidentity.os2vikar.config.modules.Cpr;
-import dk.digitalidentity.os2vikar.config.modules.Nexus;
+import dk.digitalidentity.os2vikar.config.modules.KMDNexus;
+import dk.digitalidentity.os2vikar.config.modules.NexusSync;
 import dk.digitalidentity.os2vikar.config.modules.O365;
 import dk.digitalidentity.os2vikar.config.modules.Organisation;
 import dk.digitalidentity.os2vikar.config.modules.PreCreateAD;
 import dk.digitalidentity.os2vikar.config.modules.RoleCatalogConfiguration;
 import dk.digitalidentity.os2vikar.config.modules.SofdConfiguration;
 import dk.digitalidentity.os2vikar.config.modules.SyncADGroups;
+import dk.digitalidentity.os2vikar.config.modules.Ui;
 import dk.digitalidentity.os2vikar.config.modules.WebSocketsConfiguration;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Component
 @Getter
@@ -28,6 +30,8 @@ public class OS2VikarConfiguration {
 	private boolean dev = false;
 	private String systemAdminRoleId;
 	private String substituteAdminRoleId;
+	private String longtermSubstituteAdminRoleId;
+	private String statisticsAdminRoleId;
 	private String constraintItSystemIdentifier = "http://os2vikar.dk/constraints/itsystem/1";
 	private String constraintOrgUnitIdentifier = "http://sts.kombit.dk/constraints/orgenhed/1";
 	
@@ -36,7 +40,9 @@ public class OS2VikarConfiguration {
 	private boolean doubleAccountsAllowed = true;
 	private long passwordChangeSize = 8;
 	private boolean employeeSignatureEnabled = false;
+	private int defaultDefaultDays = 10;
 	private int defaultMaxDays = 10;
+	private int defaultFutureDays = 30;
 	private boolean enableAuthorizationCodes = false;
 
 	private boolean passwordChangeAllowed = false;
@@ -63,8 +69,11 @@ public class OS2VikarConfiguration {
 	private SofdConfiguration sofd = new SofdConfiguration();
 	private WebSocketsConfiguration websockets = new WebSocketsConfiguration();
 	private PreCreateAD preCreateAD = new PreCreateAD();
-	private Nexus nexus = new Nexus();
+	private NexusSync nexus = new NexusSync();
+	private KMDNexus kmdNexus = new KMDNexus();
 	private O365 o365 = new O365();
 	private SyncADGroups syncADGroups = new SyncADGroups();
 	private List<ConstraintITSystem> constraintITSystems = new ArrayList<>();
+	
+	private Ui ui = new Ui();
 }

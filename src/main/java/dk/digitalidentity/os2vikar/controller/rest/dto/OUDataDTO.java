@@ -14,4 +14,5 @@ public class OUDataDTO {
 	private List<RoleDTO> roles;
 	private int maxDays;
 	private int defaultDays;
+	private int maxFutureDays;
 }

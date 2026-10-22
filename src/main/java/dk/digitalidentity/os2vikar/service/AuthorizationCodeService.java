@@ -2,40 +2,58 @@ package dk.digitalidentity.os2vikar.service;
 
 import java.time.LocalDate;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
-import javax.transaction.Transactional;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
-
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.transaction.annotation.Transactional;
 
 import dk.digitalidentity.os2vikar.dao.model.AuthorizationCode;
 import dk.digitalidentity.os2vikar.dao.model.Substitute;
-import dk.digitalidentity.os2vikar.service.model.ArrayOfHealthProfessional;
-import dk.digitalidentity.os2vikar.service.model.HealthProfessional;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
 public class AuthorizationCodeService {
+//	private RestTemplate restTemplate;
 	
 	@Autowired
 	private SubstituteService substituteService;
 
 	@Autowired
 	private WebSocketService websocketService;
+	
+    @Autowired
+    private AutorisationLookupService fallbackService;
+
+    /*
+	@SuppressWarnings("deprecation")
+	@EventListener(ApplicationReadyEvent.class)
+	public void init() throws Exception {
+		TrustStrategy acceptingTrustStrategy = (X509Certificate[] _, String _) -> true;
+
+		SSLContext sslContext = SSLContextBuilder.create()
+            .loadTrustMaterial(acceptingTrustStrategy)
+            .build();
+
+        SSLConnectionSocketFactory sslSocketFactory = SSLConnectionSocketFactoryBuilder.create()
+                .setSslContext(sslContext)
+                .build();
+        
+        PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
+                .setSSLSocketFactory(sslSocketFactory)
+                .build();
+        
+        // Build the HTTP client
+        CloseableHttpClient client = HttpClients.custom()
+                .setConnectionManager(connectionManager)
+                .build();
+
+		BufferingClientHttpRequestFactory requestFactory = new BufferingClientHttpRequestFactory(new HttpComponentsClientHttpRequestFactory(client));
+
+		this.restTemplate = new RestTemplate(requestFactory);
+	}
+	*/
 
 	@Transactional
 	public void assignAuthorizationCodes() {
@@ -89,14 +107,16 @@ public class AuthorizationCodeService {
 		String date = yearString + "-" + month + "-" + day;
 		
 		// verify it is an actual CPR (robots and stuff will be skipped here)
+		LocalDate birthDate = null;
 		try {
-			LocalDate.parse(date);
+			birthDate = LocalDate.parse(date);
 		}
 		catch (Exception ex) {
 			return Collections.emptyList();
 		}
 		
-		RestTemplate restTemplate = new RestTemplate();
+		/* old code, that does not work when autorisationCodeService is down
+		
 		HttpHeaders headers = getHeaders();
 		String url = "https://autregwebservice.sst.dk/autregservice.asmx/GetHealthProfessionals?name=" + name + "&authorizationId=\"\"&birthdayFrom=" + date + "&birthdayTo=" + date + "&authorizationDateFrom=1950-01-01&authorizationDateTo=2030-01-01&professionGroup=\"\"&specialityName=\"\"&authorizationStatus=NotSpecified&seventyFiveYearsRule=NotSpecified";
 
@@ -147,6 +167,12 @@ public class AuthorizationCodeService {
 		if (sortedAndValidAuthorizationCodes.isEmpty()) {
 			return Collections.emptyList();
 		}
+		*/
+
+		List<AuthorizationCode> sortedAndValidAuthorizationCodes = fallbackService.findValidAutorisationsIds(name, birthDate);
+		if (sortedAndValidAuthorizationCodes.isEmpty()) {
+			return sortedAndValidAuthorizationCodes;
+		}
 
 		// flag the first as prime
 		sortedAndValidAuthorizationCodes.get(0).setPrime(true);
@@ -154,6 +180,7 @@ public class AuthorizationCodeService {
 		return sortedAndValidAuthorizationCodes;
 	}
 
+	/*
 	private AuthorizationCode toAuthorizationCode(HealthProfessional healthProfessional) {
 		AuthorizationCode authorizationCode = new AuthorizationCode();
 		authorizationCode.setCode(healthProfessional.getAuthorizationID());
@@ -170,4 +197,5 @@ public class AuthorizationCodeService {
 
 		return headers;
 	}
+	*/
 }

@@ -33,4 +33,5 @@ public class SubstituteWithPlaceDTO {
 	private boolean useSofdADUser = false;
 	private String sofdADUserId;
 	private String authorizationCode;
+	private String nexusStatus;
 }

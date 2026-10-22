@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'titles')" />
+			<div th:replace="~{fragments/topbar :: topbar(page = 'titles')}" />
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -175,7 +175,7 @@
 		</div>
 	</div>
 
-	<div th:replace="fragments/footer :: scripts(datatables = true, checkbox = true)"></div>
+	<div th:replace="~{fragments/footer :: scripts(datatables = true, checkbox = true)}"></div>
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/
@@ -283,7 +283,8 @@
 				var id = $(elem).data("id");
 				var title = $(elem).data("title");
 
-				var guidsString = $(elem).data("guids");
+				// when the guids are just plain numbers, this fails when using data(), as it casts it to a number, which cannot be split
+				var guidsString = $(elem).attr("data-guids");
 				var guids = [];
 				if (guidsString != null) {
 					guids = guidsString.split(",");

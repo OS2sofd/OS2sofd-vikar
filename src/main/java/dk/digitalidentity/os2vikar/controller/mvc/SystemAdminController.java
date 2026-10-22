@@ -2,11 +2,11 @@ package dk.digitalidentity.os2vikar.controller.mvc;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
-import dk.digitalidentity.os2vikar.config.modules.ConstraintITSystem;
 import org.owasp.html.HtmlPolicyBuilder;
 import org.owasp.html.PolicyFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,12 +16,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.ModelAndView;
 
+import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
+import dk.digitalidentity.os2vikar.config.modules.ConstraintITSystem;
 import dk.digitalidentity.os2vikar.controller.mvc.dto.OUTreeForm;
 import dk.digitalidentity.os2vikar.controller.mvc.dto.RoleDTO;
 import dk.digitalidentity.os2vikar.controller.mvc.dto.TitleDTO;
 import dk.digitalidentity.os2vikar.controller.mvc.dto.UserRoleDTO;
 import dk.digitalidentity.os2vikar.dao.model.AuditLog;
+import dk.digitalidentity.os2vikar.dao.model.AuditLogProjection;
 import dk.digitalidentity.os2vikar.dao.model.CmsMessage;
 import dk.digitalidentity.os2vikar.dao.model.GlobalTitle;
 import dk.digitalidentity.os2vikar.dao.model.OrgUnit;
@@ -36,6 +40,7 @@ import dk.digitalidentity.os2vikar.service.GlobalTitleService;
 import dk.digitalidentity.os2vikar.service.OrgUnitService;
 import dk.digitalidentity.os2vikar.service.SettingsService;
 import dk.digitalidentity.os2vikar.service.UserRoleService;
+import dk.digitalidentity.os2vikar.service.xls.AuditlogXlsView;
 
 @Controller
 @RequireSystemAdminAccess
@@ -71,7 +76,6 @@ public class SystemAdminController {
 	@Autowired
 	private OS2VikarConfiguration configuration;
 
-
 	@GetMapping("/systemadmin/orgunits")
 	public String systemadmin(Model model) {
 		List<OUTreeForm> orgUnits = new ArrayList<>();
@@ -84,12 +88,16 @@ public class SystemAdminController {
 			}
 			orgUnits.add(new OUTreeForm(orgUnit, true, systemBadgeNames));
 		}
+		
 		model.addAttribute("orgUnits", orgUnits);
+		model.addAttribute("adGroupsAvailable", adGroupService.getAll());
+
 		return "system_admin/org_units";
 	}
 
-	record ITSystemOrgUnitDTO (String name, String identifier, boolean checked) {}
-	record ADGroupOrgUnitDTO (String name, String guid, boolean checked) {}
+	record ITSystemOrgUnitDTO (String name, String identifier, boolean checked) { }
+	record ADGroupOrgUnitDTO (String name, String guid, boolean checked) { }
+	
 	@GetMapping(path = {"/systemadmin/orgunits/description/{uuid}"})
 	public String detail(Model model, @PathVariable("uuid") String uuid) {
 		OrgUnit orgUnit = orgUnitService.getByUuid(uuid);
@@ -129,7 +137,8 @@ public class SystemAdminController {
 
 		if (orgUnit.getAdGroups() == null || orgUnit.getAdGroups().isEmpty()) {
 			model.addAttribute("adGroups", adGroupService.getAll().stream().map(g -> new ADGroupOrgUnitDTO(g.getName(), g.getObjectGuid(), false)).collect(Collectors.toList()));
-		} else {
+		}
+		else {
 			List<String> assignedObjectGuids = orgUnit.getAdGroups().stream().map(g -> g.getAdGroup().getObjectGuid()).collect(Collectors.toList());
 			model.addAttribute("adGroups", adGroupService.getAll().stream().map(g -> new ADGroupOrgUnitDTO(g.getName(), g.getObjectGuid(), assignedObjectGuids.contains(g.getObjectGuid()))).collect(Collectors.toList()));
 		}
@@ -194,6 +203,21 @@ public class SystemAdminController {
 	@GetMapping("/systemadmin/auditlog")
 	public String log(Model model) {
 		return "system_admin/log";
+	}
+	
+	@GetMapping("/systemadmin/auditlog/download")
+	public ModelAndView downloadOrgUnits(
+			@RequestParam(required = false) String searchDate,
+			@RequestParam(required = false) String searchAdmin,
+			@RequestParam(required = false) String searchSubstitute,
+			@RequestParam(required = false) String searchEvent
+	) {
+		List<AuditLogProjection> auditlogs = auditLogService.search(searchDate, searchAdmin, searchSubstitute, searchEvent);
+
+		Map<String, Object> model = new HashMap<>();
+		model.put("auditlogs", auditlogs);
+
+		return new ModelAndView(new AuditlogXlsView(), model);
 	}
 
 	@GetMapping("/systemadmin/auditlog/{id}/details")

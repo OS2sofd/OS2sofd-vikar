@@ -4,10 +4,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
-import javax.validation.Valid;
-
-import dk.digitalidentity.os2vikar.dao.model.GlobalTitleUserRoleMapping;
-import dk.digitalidentity.os2vikar.dao.model.OrgUnitUserRoleMapping;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.datatables.mapping.DataTablesInput;
 import org.springframework.data.jpa.datatables.mapping.DataTablesOutput;
@@ -25,10 +21,13 @@ import dk.digitalidentity.os2vikar.dao.model.ADGroup;
 import dk.digitalidentity.os2vikar.dao.model.GlobalRole;
 import dk.digitalidentity.os2vikar.dao.model.GlobalTitle;
 import dk.digitalidentity.os2vikar.dao.model.GlobalTitleADGroupMapping;
+import dk.digitalidentity.os2vikar.dao.model.GlobalTitleUserRoleMapping;
 import dk.digitalidentity.os2vikar.dao.model.LocalRole;
 import dk.digitalidentity.os2vikar.dao.model.LocalTitle;
+import dk.digitalidentity.os2vikar.dao.model.LocalTitleADGroupMapping;
 import dk.digitalidentity.os2vikar.dao.model.OrgUnit;
 import dk.digitalidentity.os2vikar.dao.model.OrgUnitADGroupMapping;
+import dk.digitalidentity.os2vikar.dao.model.OrgUnitUserRoleMapping;
 import dk.digitalidentity.os2vikar.dao.model.UserRole;
 import dk.digitalidentity.os2vikar.datatables.AuditLogDatatablesDao;
 import dk.digitalidentity.os2vikar.datatables.GlobalRoleDatatablesDao;
@@ -45,6 +44,7 @@ import dk.digitalidentity.os2vikar.service.OrgUnitService;
 import dk.digitalidentity.os2vikar.service.SettingsService;
 import dk.digitalidentity.os2vikar.service.UserRoleService;
 import dk.digitalidentity.os2vikar.service.dto.DeleteAfterPeriod;
+import jakarta.validation.Valid;
 
 @RestController
 @RequireSystemAdminAccess
@@ -99,18 +99,47 @@ public class SystemAdminRestController {
 		return new ResponseEntity<>(HttpStatus.OK);
 	}
 	
-	@AuditLogIntercepted(operation = "Opret lokal arbejdstitel på enhed", args = {"title", "uuid"})
+	record CreateLocalTitleDTO (Long id, String title, List<String> adGroupObjectGuids) {}
+	@AuditLogIntercepted(operation = "Opret lokal arbejdstitel på enhed", args = { "uuid" })
 	@PostMapping("rest/systemadmin/orgunits/{uuid}/localtitles/save")
-	public ResponseEntity<?> saveLocalTitle(@RequestParam String title, @PathVariable String uuid) {
+	public ResponseEntity<?> saveLocalTitle(@RequestBody CreateGlobalTitleDTO dto, @PathVariable String uuid) {
 		OrgUnit orgUnit = orgUnitService.getByUuid(uuid);
-		
 		if (orgUnit == null) {
 			return new ResponseEntity<>("Kunne ikke finde enhed med uuid " + uuid, HttpStatus.BAD_REQUEST);
 		}
-		
-		LocalTitle localTitle = new LocalTitle();
-		localTitle.setTitle(title);
-		localTitle.setOrgUnit(orgUnit);
+
+		LocalTitle localTitle = localTitleService.getById(dto.id());
+		if (localTitle == null) {
+			localTitle = new LocalTitle();
+			localTitle.setTitle(dto.title());
+			localTitle.setOrgUnit(orgUnit);
+		}
+
+		if (configuration.getSyncADGroups().isEnabled() && dto.adGroupObjectGuids() != null) {
+			if (localTitle.getAdGroups() == null) {
+				localTitle.setAdGroups(new ArrayList<>());
+			}
+
+			for (String guid : dto.adGroupObjectGuids()) {
+				ADGroup adGroup = adGroupService.getByObjectGuid(guid);
+				if (adGroup == null) {
+					return new ResponseEntity<>("Kunne ikke finde ADGroup med guid " + guid, HttpStatus.BAD_REQUEST);
+				}
+
+				boolean foundMatch = localTitle.getAdGroups().stream().anyMatch(t -> t.getAdGroup().getObjectGuid().equals(guid));
+				if (foundMatch) {
+					continue;
+				}
+
+				LocalTitleADGroupMapping mapping = new LocalTitleADGroupMapping();
+				mapping.setAdGroup(adGroup);
+				mapping.setLocalTitle(localTitle);
+				localTitle.getAdGroups().add(mapping);
+			}
+
+			localTitle.getAdGroups().removeIf(g -> !dto.adGroupObjectGuids().contains(g.getAdGroup().getObjectGuid()));
+		}
+
 		localTitleService.save(localTitle);
 
 		return new ResponseEntity<>(HttpStatus.OK);
@@ -254,7 +283,7 @@ public class SystemAdminRestController {
 		return new ResponseEntity<>(HttpStatus.OK);
 	}
 	
-	record CreateGlobalTitleDTO (long id, String title, List<String> adGroupObjectGuids, List<String> systemIdentifiers, List<Long> userRoleIds) {}
+	record CreateGlobalTitleDTO (Long id, String title, List<String> adGroupObjectGuids, List<String> systemIdentifiers, List<Long> userRoleIds) {}
 	@AuditLogIntercepted(operation = "Administrer global arbejdstitel", args = {"dto"})
 	@PostMapping("rest/systemadmin/globaltitles/save")
 	public ResponseEntity<?> saveGlobalTitle(@RequestBody CreateGlobalTitleDTO dto) {
@@ -376,7 +405,8 @@ public class SystemAdminRestController {
 		orgUnit.setCanHaveSubstitutes(allowed);
 		if (allowed && orgUnit.getMaxSubstituteWorkingDays() == 0) {
 			orgUnit.setMaxSubstituteWorkingDays(configuration.getDefaultMaxDays());
-			orgUnit.setDefaultSubstituteWorkingDays(configuration.getDefaultMaxDays());
+			orgUnit.setDefaultSubstituteWorkingDays(configuration.getDefaultDefaultDays());
+			orgUnit.setMaxDaysInFuture(configuration.getDefaultFutureDays());
 		}
 		orgUnitService.save(orgUnit);
 
@@ -393,6 +423,21 @@ public class SystemAdminRestController {
 		}
 		
 		orgUnit.setMaxSubstituteWorkingDays(days);
+		orgUnitService.save(orgUnit);
+
+		return new ResponseEntity<>(HttpStatus.OK);
+	}
+
+	@AuditLogIntercepted(operation = "Sæt det maksimale antal dage i fremtiden for vikarer i en enhed", args = {"days", "uuid"})
+	@PostMapping("rest/systemadmin/orgunits/{uuid}/maxDaysInFuture")
+	public ResponseEntity<?> setMaxFutureDays(@RequestParam int days, @PathVariable String uuid) {
+		OrgUnit orgUnit = orgUnitService.getByUuid(uuid);
+		
+		if (orgUnit == null) {
+			return new ResponseEntity<>("Kunne ikke finde enhed med uuid " + uuid, HttpStatus.BAD_REQUEST);
+		}
+		
+		orgUnit.setMaxDaysInFuture(days);
 		orgUnitService.save(orgUnit);
 
 		return new ResponseEntity<>(HttpStatus.OK);

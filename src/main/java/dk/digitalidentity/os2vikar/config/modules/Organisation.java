@@ -6,6 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Organisation {
-	private boolean enabled = true;
-    private String url = "http://os2sync.digital-identity.dk/api/hierarchy";
+	private OrganisationSource source = OrganisationSource.FK_ORGANISATION;
+
+	private String url = "http://os2sync.internal-dns.dk/api/hierarchy";
 }

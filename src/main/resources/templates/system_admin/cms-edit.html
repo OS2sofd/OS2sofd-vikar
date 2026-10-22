@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header (texteditor = true)" />
+<head th:replace="~{fragments/header :: header (texteditor = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 		<div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar (page = 'admin.cms-edit')" />
+			<div th:replace="~{fragments/topbar :: topbar (page = 'settings')}" />
 
 			<div class="wrapper wrapper-content">
 				<div class="row">
@@ -38,7 +38,7 @@
 		</div>
 	</div>
 
-	<div th:replace="fragments/footer :: scripts(texteditor = true)"></div>
+	<div th:replace="~{fragments/footer :: scripts(texteditor = true)}"></div>
 	
 	<!-- fix for summernote integration with iCheck -->
 	<style type="text/css">

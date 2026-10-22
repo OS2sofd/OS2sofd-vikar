@@ -31,11 +31,19 @@
 				</div>
 			</div>
 		</fieldset>
+		<fieldset th:if="${@OS2VikarConfiguration.getKmdNexus().isEnabled() and substituteForm.nexusStatus != null}">
+			<div class="form-group row">
+				<label class="col-lg-2 control-label">Nexus status</label>
+				<div class="col-lg-10">
+					<input th:field="${substituteForm.nexusStatus}" class="form-control" disabled="disabled">
+				</div>
+			</div>
+		</fieldset>
 		<fieldset>
 			<div class="form-group row">
 				<label class="col-lg-2 control-label">Fornavn*</label>
 				<div class="col-lg-10">
-					<input th:field="${substituteForm.name}" class="form-control">
+					<input th:field="${substituteForm.name}" class="form-control" th:disabled="${@OS2VikarConfiguration.getUi().isForceCprLookup()}">
 				</div>
 			</div>
 		</fieldset>
@@ -43,11 +51,11 @@
 			<div class="form-group row">
 				<label class="col-lg-2 control-label">Efternavn*</label>
 				<div class="col-lg-10">
-					<input th:field="${substituteForm.surname}" class="form-control">
+					<input th:field="${substituteForm.surname}" class="form-control" th:disabled="${@OS2VikarConfiguration.getUi().isForceCprLookup()}">
 				</div>
 			</div>
 		</fieldset>
-		<fieldset>
+		<fieldset th:if="${@OS2VikarConfiguration.getUi().isShowEmailOnSubstitute()}">
 			<div class="form-group row">
 				<label class="col-lg-2 control-label">Email</label>
 				<div class="col-lg-10">
@@ -55,7 +63,7 @@
 				</div>
 			</div>
 		</fieldset>
-		<fieldset>
+		<fieldset th:if="${@OS2VikarConfiguration.getUi().isShowPhoneOnSubstitute()}">
 			<div class="form-group row">
 				<label class="col-lg-2 control-label">Telefon</label>
 				<div class="col-lg-10">
@@ -63,7 +71,7 @@
 				</div>
 			</div>
 		</fieldset>
-		<fieldset>
+		<fieldset th:if="${@OS2VikarConfiguration.getUi().isShowAgencyOnSubstitute()}">
 			<div class="form-group row">
 				<label class="col-lg-2 control-label">Vikarbureau</label>
 				<div class="col-lg-10">
@@ -103,7 +111,7 @@
 
 		/*[+
 			var baseUrl = [[@{/}]];
-			var allowDoubleAccounts = [[${@OS2VikarConfiguration.isDoubleAccountsAllowed()}]];
+			var allowDoubleAccounts = [[${@OS2VikarConfiguration.isDoubleAccountsAllowed() or isAdmin}]];
 			var authorizationCodesEnabled = [[${@OS2VikarConfiguration.enableAuthorizationCodes}]];
 			var isEdit = [[${edit}]];
 		+]*/

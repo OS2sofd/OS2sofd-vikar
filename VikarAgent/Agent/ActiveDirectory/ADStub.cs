@@ -15,6 +15,7 @@ namespace OS2Vikar
         private readonly string managerDN;
         private readonly List<string> securityGroupsOnCreate;
         private readonly List<string> securityGroupsOUDNs;
+        private readonly string kerberosEncryptionType;
 
         private ActiveDirectoryPowershellRunner activeDirectoryPowershellRunner = new ActiveDirectoryPowershellRunner("InternalPowershell\\createUser.ps1");
 
@@ -30,6 +31,7 @@ namespace OS2Vikar
                 logger);
 
             this.managerDN = settings.GetStringValue("managerDN");
+            this.kerberosEncryptionType = settings.GetStringValue("kerberosEncryptionType");
             this.securityGroupsOUDNs = new List<string>();
             string securityGroupsOUDN = settings.GetStringValue("syncADGroupsOUDN");
             if (!string.IsNullOrEmpty(securityGroupsOUDN))
@@ -440,12 +442,51 @@ namespace OS2Vikar
                         }
 
                         // set manager
-                        if (!string.IsNullOrEmpty(managerDN))
+                        if (!string.IsNullOrEmpty(managerDN) || !string.IsNullOrEmpty(kerberosEncryptionType))
                         {
                             DirectoryEntry newUserEntry = newUser.GetUnderlyingObject() as DirectoryEntry;
-                            newUserEntry.Properties["manager"].Value = managerDN;
+
+                            if (!string.IsNullOrEmpty(managerDN))
+                            {
+                                newUserEntry.Properties["manager"].Value = managerDN;
+                            }
+
+                            if (!string.IsNullOrEmpty(kerberosEncryptionType))
+                            {
+                                int encryptionTypes = 0;
+
+                                if (kerberosEncryptionType.Contains("DES-CBC-CRC"))
+                                {
+                                    encryptionTypes |= 0x01;
+                                }
+
+                                if (kerberosEncryptionType.Contains("DES-CBC-MD5"))
+                                {
+                                    encryptionTypes |= 0x02;
+                                }
+
+                                if (kerberosEncryptionType.Contains("RC4-HMAC"))
+                                {
+                                    encryptionTypes |= 0x04;
+                                }
+
+                                if (kerberosEncryptionType.Contains("AES128"))
+                                {
+                                    encryptionTypes |= 0x08;
+                                }
+
+                                if (kerberosEncryptionType.Contains("AES256"))
+                                {
+                                    encryptionTypes |= 0x10;
+                                }
+
+                                newUserEntry.Properties["msDS-SupportedEncryptionTypes"].Value = encryptionTypes;
+                            }
+
                             newUserEntry.CommitChanges();
                         }
+
+                        
                     }
                 }
 

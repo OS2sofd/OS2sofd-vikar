@@ -19,7 +19,8 @@ public class SyncADGroupsTask {
 	@Autowired
 	private OS2VikarConfiguration config;
 
-	@Scheduled(cron = "${cron.ad.fullsync:0 #{new java.util.Random().nextInt(55)} 2 * * ?}")
+	// execute just after midnight to ensure roles are in-sync
+	@Scheduled(cron = "${cron.ad.fullsync:0 #{new java.util.Random().nextInt(20)} 0 * * ?}")
 	public void execute() throws Exception {
 		if (!config.isScheduledJobsEnabled() || !config.getSyncADGroups().isEnabled()) {
 			return;

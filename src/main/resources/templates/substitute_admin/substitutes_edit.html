@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'substitutes')"></div>
+			<div th:replace="~{fragments/topbar :: topbar(page = 'substitutes')}"></div>
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -38,7 +38,7 @@
                             </div>
 		
                             <div class="ibox-content">
-                            	<div th:replace="substitute_admin/fragments/substitute_form :: substituteForm(edit = true)"></div>
+                            	<div th:replace="~{substitute_admin/fragments/substitute_form :: substituteForm(edit = true)}"></div>
 								<button class="btn btn-primary full-width" style="margin-bottom: 10px" onclick="substituteService.save();">Gem</button>
 	                        	<br/><hr/><br/>
 	                        	<h3>Arbejdssteder</h3>
@@ -64,7 +64,7 @@
 			        </button>
 			    </div>
 				<div class="modal-body">
-					<div th:replace="substitute_admin/fragments/workplace_form :: workplaceForm"></div>
+					<div th:replace="~{substitute_admin/fragments/workplace_form :: workplaceForm}"></div>
 				</div>
 				<div class="modal-footer">
 					<button class="btn btn-primary" id="createWorkplaceButton" onclick="substituteService.saveWorkplace()">Opret</button>
@@ -115,14 +115,14 @@
 	
 	<div id="editWorkplaceModalPlaceholder"></div>
 
-	<div th:replace="substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnit"></div>
+	<div th:replace="~{substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnit}"></div>
 	
-	<div th:replace="fragments/footer :: scripts(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)"></div>
-	<div th:replace="substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnitScript"></div>
-	<div th:replace="substitute_admin/fragments/substitute_form :: substituteFormScript"></div>
-	<div th:replace="substitute_admin/fragments/workplace_form :: workplaceFormScript"></div>
-	<div th:replace="substitute_admin/fragments/workplace_table :: workplaceTableScript"></div>
-	<div th:replace="substitute_admin/fragments/substitutes_edit_workplace :: substituteEditWorkplaceScript"></div>
+	<div th:replace="~{fragments/footer :: scripts(datatables = true, select2 = true, jstree = true, datepicker = true, checkbox = true)}"></div>
+	<div th:replace="~{substitute_admin/fragments/substitutes_choose_org_unit :: substitutesChooseOrgUnitScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/substitute_form :: substituteFormScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/workplace_form :: workplaceFormScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/workplace_table :: workplaceTableScript}"></div>
+	<div th:replace="~{substitute_admin/fragments/substitutes_edit_workplace :: substituteEditWorkplaceScript}"></div>
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/

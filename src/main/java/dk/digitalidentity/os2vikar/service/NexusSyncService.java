@@ -31,7 +31,7 @@ public class NexusSyncService {
 		try {
 			ResponseEntity<String> response = restTemplate.exchange(configuration.getNexus().getSyncUrl() + username + "/" + configuration.getCvr(), HttpMethod.PUT, request, String.class);
 			if (response.getStatusCode() != HttpStatus.OK && response.getStatusCode() != HttpStatus.NOT_FOUND) {
-				log.warn("Failed to reset user in Nexus - " + username + " http status " + response.getStatusCodeValue());
+				log.warn("Failed to reset user in Nexus - " + username + " http status " + response.getStatusCode().value());
 				return false;
 			}
 		}

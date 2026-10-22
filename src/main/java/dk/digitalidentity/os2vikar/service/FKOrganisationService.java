@@ -1,21 +1,5 @@
 package dk.digitalidentity.os2vikar.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
-
-import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
-import dk.digitalidentity.os2vikar.dao.model.OrgUnit;
-import dk.digitalidentity.os2vikar.service.dto.FKHierarchyWrapper;
-import dk.digitalidentity.os2vikar.service.dto.FKOU;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,105 +7,64 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+
+import dk.digitalidentity.os2vikar.config.OS2VikarConfiguration;
+import dk.digitalidentity.os2vikar.dao.model.OrgUnit;
+import dk.digitalidentity.os2vikar.service.dto.FKHierarchyWrapper;
+import dk.digitalidentity.os2vikar.service.dto.FKOU;
+import lombok.extern.slf4j.Slf4j;
+
 @Slf4j
 @Service
 public class FKOrganisationService {
+	// TODO: rewrite to RestClient
 	private RestTemplate restTemplate = new RestTemplate();
 
 	@Autowired
 	private OS2VikarConfiguration config;
 
 	@Autowired
-	private FKOrganisationService self;
-
-	@Autowired
 	private OrgUnitService orgUnitService;
 
-	public List<FKOU> getOrgUnits() throws Exception {
-		log.info("Attempting to fetch organisation data from FK Organisation");
-
-		var headers = new HttpHeaders();
-		headers.add("Cvr", config.getCvr());
-		headers.add("onlyOUs", "true");
-		HttpEntity<String> request = new HttpEntity<>(headers);
-
-		ResponseEntity<String> keyResponse = restTemplate.exchange(config.getOrganisation().getUrl(), HttpMethod.GET, request, String.class);
-
-		if (keyResponse.getStatusCodeValue() != 200) {
-			throw new Exception("Synchronization (getKey) failed: " + keyResponse.getStatusCodeValue());
-		}
-
-		String key = keyResponse.getBody().replace("\"", "");
-
-		ResponseEntity<FKHierarchyWrapper> response = null;
-		var maxAttempts = 60;
-
-		for (int i = 1; i <= maxAttempts; i++) {
-			Thread.sleep(5 * 1000); // sleep 5 seconds before attempting to read again
-
-			try {
-				response = restTemplate.getForEntity(config.getOrganisation().getUrl() + "/" + key, FKHierarchyWrapper.class);
-
-				if (response.getStatusCodeValue() != 404) {
-					break;
-				}
-			}
-			catch (RestClientException e) {
-				log.warn("Failed to get hierarchy for key " + key + ". Attempt " + i + " of " + maxAttempts + ".");
-			}
-		}
-
-		if (response == null) {
-			log.warn("Synchronization (getResponse) failed: Timeout");
-			throw new Exception("Synchronization (getResponse) failed: Timeout");
-		}
-
-		if (response.getStatusCodeValue() != 200) {
-			log.warn("Synchronization (getResponse) failed: " + response.getStatusCodeValue());
-			throw new Exception("Synchronization (getResponse) failed: " + response.getStatusCodeValue());
-		}
-
-		FKHierarchyWrapper hierarchyWrapper = response.getBody();
-
-		if (hierarchyWrapper.getStatus() != 0) {
-			throw new Exception("Synchronization (HierarchyStatus) failed: " + hierarchyWrapper.getStatus());
-		}
-
-		var hierarchy = hierarchyWrapper.getResult();
-		log.info("Successfully fetched orgunit Hierarcy. OU count: " + hierarchy.getOus().size() + ".");
-
-		return hierarchy.getOus();
-	}
-
-	@Transactional
 	public void updateOrgUnits() throws Exception {
 		log.info("Updating org units");
 
 		List<FKOU> sourceOrgUnits;
-		List<OrgUnit> dbOrgUnits;
 		List<String> sourceOrgUnitsUuids;
 		
 		try {
-			sourceOrgUnits = self.getOrgUnits();
-			dbOrgUnits = orgUnitService.getAll();
+			sourceOrgUnits = getOrgUnits();
 			sourceOrgUnitsUuids = sourceOrgUnits.stream().map(o -> o.getUuid()).collect(Collectors.toList());
 		}
 		catch (Exception ex) {
 			log.warn("Failed to get data for orgunit update", ex);
 			return;
 		}
-		
-		// Handle updating and adding
-		FKOU parentOrg = null;
-		var rootOrg = sourceOrgUnits.stream().filter(o -> o.getParentOU() == null).findFirst();
 
-		if (rootOrg.isEmpty()) {
+		// extract root orgUnit
+		FKOU parentOrg = sourceOrgUnits.stream().filter(o -> o.getParentOU() == null).findFirst().orElse(null);
+		if (parentOrg == null) {
 			throw new Exception("Could not find root OU");
 		}
-		parentOrg = rootOrg.get();
 
+		// compare logic starts here
 		List<OrgUnit> toCreate = new ArrayList<>();
 		List<OrgUnit> toUpdate = new ArrayList<>();
+
+		List<OrgUnit> dbOrgUnits = orgUnitService.getAll(o -> {
+			if (o.getParent() != null) {
+				o.getParent().getUuid();
+			}
+		});
+
 		Map<String, OrgUnit> dbOrgUnitMap = dbOrgUnits.stream().collect(Collectors.toMap(OrgUnit::getUuid, Function.identity()));
 		handleOrgUnitsRecursive(null, parentOrg, sourceOrgUnits, dbOrgUnitMap, toCreate, toUpdate);
 
@@ -154,13 +97,69 @@ public class FKOrganisationService {
 		log.info("Finished updating org units");
 	}
 
-	private void handleOrgUnitsRecursive(OrgUnit parent, FKOU current, List<FKOU> sourceOrgUnits, Map<String, OrgUnit> dbOrgUnitMap, List<OrgUnit> toCreate, List<OrgUnit> toUpdate) {		
-		OrgUnit temp = dbOrgUnitMap.get(current.getUuid());
+	private List<FKOU> getOrgUnits() throws Exception {
+		log.info("Attempting to fetch organisation data from FK Organisation");
+
+		var headers = new HttpHeaders();
+		headers.add("Cvr", config.getCvr());
+		headers.add("onlyOUs", "true");
+		HttpEntity<String> request = new HttpEntity<>(headers);
+
+		ResponseEntity<String> keyResponse = restTemplate.exchange(config.getOrganisation().getUrl(), HttpMethod.GET, request, String.class);
+
+		if (keyResponse.getStatusCode().value() != 200) {
+			throw new Exception("Synchronization (getKey) failed: " + keyResponse.getStatusCode().value());
+		}
+
+		String key = keyResponse.getBody().replace("\"", "");
+
+		ResponseEntity<FKHierarchyWrapper> response = null;
+		var maxAttempts = 60;
+
+		for (int i = 1; i <= maxAttempts; i++) {
+			Thread.sleep(5 * 1000); // sleep 5 seconds before attempting to read again
+
+			try {
+				response = restTemplate.getForEntity(config.getOrganisation().getUrl() + "/" + key, FKHierarchyWrapper.class);
+
+				if (response.getStatusCode().value() != 404) {
+					break;
+				}
+			}
+			catch (RestClientException e) {
+				log.warn("Failed to get hierarchy for key " + key + ". Attempt " + i + " of " + maxAttempts + ".");
+			}
+		}
+
+		if (response == null) {
+			log.warn("Synchronization (getResponse) failed: Timeout");
+			throw new Exception("Synchronization (getResponse) failed: Timeout");
+		}
+
+		if (response.getStatusCode().value() != 200) {
+			log.warn("Synchronization (getResponse) failed: " + response.getStatusCode().value());
+			throw new Exception("Synchronization (getResponse) failed: " + response.getStatusCode().value());
+		}
+
+		FKHierarchyWrapper hierarchyWrapper = response.getBody();
+
+		if (hierarchyWrapper.getStatus() != 0) {
+			throw new Exception("Synchronization (HierarchyStatus) failed: " + hierarchyWrapper.getStatus());
+		}
+
+		var hierarchy = hierarchyWrapper.getResult();
+		log.info("Successfully fetched orgunit Hierarcy. OU count: " + hierarchy.getOus().size() + ".");
+
+		return hierarchy.getOus();
+	}
+
+	private void handleOrgUnitsRecursive(OrgUnit parent, FKOU sourceCurrent, List<FKOU> sourceOrgUnits, Map<String, OrgUnit> dbOrgUnitMap, List<OrgUnit> toCreate, List<OrgUnit> toUpdate) {		
+		OrgUnit temp = dbOrgUnitMap.get(sourceCurrent.getUuid());
 		if (temp == null) {
 			temp = new OrgUnit();
-			temp.setUuid(current.getUuid());
+			temp.setUuid(sourceCurrent.getUuid());
 			temp.setParent(parent);
-			temp.setName(current.getName());
+			temp.setName(sourceCurrent.getName());
 			
 			log.info("OU '" + temp.getName() + "' was created");
 
@@ -169,10 +168,10 @@ public class FKOrganisationService {
 		else {
 			boolean changes = false;
 
-			if (!Objects.equals(temp.getName(), current.getName())) {
-				log.info("OU '" + temp.getName() + "' had a name change to " + current.getName());
+			if (!Objects.equals(temp.getName(), sourceCurrent.getName())) {
+				log.info("OU '" + temp.getName() + "' had a name change to " + sourceCurrent.getName());
 
-				temp.setName(current.getName());
+				temp.setName(sourceCurrent.getName());
 				changes = true;				
 			}
 			
@@ -202,7 +201,7 @@ public class FKOrganisationService {
 			}
 		}
 
-		List<FKOU> children = sourceOrgUnits.stream().filter(o -> o.getParentOU() != null && o.getParentOU().equalsIgnoreCase(current.getUuid())).collect(Collectors.toList());
+		List<FKOU> children = sourceOrgUnits.stream().filter(o -> o.getParentOU() != null && o.getParentOU().equalsIgnoreCase(sourceCurrent.getUuid())).collect(Collectors.toList());
 
 		for (FKOU child : children) {
 			handleOrgUnitsRecursive(temp, child, sourceOrgUnits, dbOrgUnitMap, toCreate, toUpdate);

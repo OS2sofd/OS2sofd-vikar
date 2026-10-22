@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(datatables = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header(datatables = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'settings')" />
+			<div th:replace="~{fragments/topbar :: topbar(page = 'settings')}" />
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -17,6 +17,7 @@
                             <div class="ibox-content">
 								<p th:utext="${@cmsMessageBundle.getText('cms.settings.helptext')}"></p>
 								<br/>
+
 								<fieldset>
 									<div class="form-group row">
 										<label class="col-lg-2 control-label">Slet vikarer efter</label>
@@ -27,7 +28,8 @@
 										</div>
 									</div>
 								</fieldset>
-								<fieldset>
+
+								<fieldset th:if="${@OS2VikarConfiguration.getUi().isShowDeleteSettings()}">
 									<div class="form-group row">
 										<label class="col-lg-2 control-label">Skal vikarer slettes i AD?</label>
 										<div class="col-lg-1">
@@ -35,7 +37,6 @@
 										</div>
 									</div>
 								</fieldset>
-
 
 								<button class="btn btn-primary offset-lg-1 col-lg-5" style="margin-top: 20px;" onclick="settingsService.save()">Gem</button>
 								<button class="btn btn-danger col-lg-5" style="margin-top: 20px;" onclick="history.back()">Annuller</button>
@@ -81,7 +82,7 @@
 	    </div>
 	</div>
 	
-	<div th:replace="fragments/footer :: scripts(datatables = true, checkbox = true)" />
+	<div th:replace="~{fragments/footer :: scripts(datatables = true, checkbox = true)}" />
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/

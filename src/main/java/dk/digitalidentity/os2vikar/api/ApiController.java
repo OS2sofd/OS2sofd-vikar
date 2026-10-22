@@ -29,9 +29,13 @@ import dk.digitalidentity.os2vikar.dao.model.Workplace;
 import dk.digitalidentity.os2vikar.security.RequireApiAccess;
 import dk.digitalidentity.os2vikar.service.ADGroupService;
 import dk.digitalidentity.os2vikar.service.GlobalTitleService;
+import dk.digitalidentity.os2vikar.service.OmadaService;
 import dk.digitalidentity.os2vikar.service.OrgUnitService;
 import dk.digitalidentity.os2vikar.service.SubstituteService;
+import dk.digitalidentity.os2vikar.service.dto.OmadaOU;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RequireApiAccess
 @RestController
 public class ApiController {
@@ -47,6 +51,9 @@ public class ApiController {
 	
 	@Autowired 
 	private ADGroupService adGroupService;
+	
+	@Autowired
+	private OmadaService omadaService;
 		
 	// used by sofd-vikar integration
 	@GetMapping("/api/substitute")
@@ -129,13 +136,34 @@ public class ApiController {
 
 		return new ResponseEntity<>(result, HttpStatus.OK);
 	}
+	
+	// uses by the local agent to sync OUs
+	@PostMapping(value = "/api/ous")
+	public ResponseEntity<HttpStatus> updateOUs(@RequestBody List<OmadaOU> ous) {
+		try {
+			omadaService.updateOrgUnits(ous);
+		}
+		catch (Exception ex) {
+			log.error("Failed to parse ous: " + ous.stream().map(Object::toString).collect(Collectors.joining(", ")), ex);
 
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+
+		return new ResponseEntity<>(HttpStatus.OK);
+	}
+	
 	// used by the local agent to sync AD groups
 	record ADGroupDTO (String name, String objectGuid) {}
 	@PostMapping(value = "/api/adgroups")
 	public ResponseEntity<HttpStatus> updateSubstitute(@RequestBody List<ADGroupDTO> groups) {
 		List<ADGroup> allFromDB = adGroupService.getAll();
-		
+
+		// if we get less than 33% of existing groups, we reject
+		if (groups == null || groups.size() < (allFromDB.size() / 3)) {
+			log.error("Modtog kun " + (groups != null ? groups.size() : "<null>") + " grupper");
+			return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+		}
+
 		for (ADGroupDTO dto : groups) {
 			ADGroup match = allFromDB.stream().filter(g -> g.getObjectGuid().equals(dto.objectGuid())).findFirst().orElse(null);
 			

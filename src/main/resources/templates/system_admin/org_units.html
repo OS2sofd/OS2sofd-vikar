@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header(jstree = true, checkbox = true, datatables = true)" />
+<head th:replace="~{fragments/header :: header(jstree = true, checkbox = true, datatables = true)}"></head>
 <body class="top-navigation">
 	<div id="wrapper">
 	    <div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar(page = 'orgUnits')" />
+			<div th:replace="~{fragments/topbar :: topbar(page = 'orgUnits')}"></div>
 
 	        <div class="wrapper wrapper-content">
 	            <div class="row">
@@ -85,34 +85,63 @@
 	</div>
 	
 	<div class="modal fade" id="modalAddTitle" role="dialog">
-		<div class="modal-dialog modal-md modal-dialog-centered">
+		<div class="modal-dialog modal-xl modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
-			        <h2 style="font-weight: bold">Opret lokal arbejdstitel</h2>
+			        <h2 style="font-weight: bold" id="addTitle" hidden>Opret lokal arbejdstitel</h2>
+					<h2 style="font-weight: bold" id="editTitle" hidden>Rediger lokal arbejdstitel</h2>
 			        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
 			          <em aria-hidden="true" class="fa fa-times"></em>
 			        </button>
 			    </div>
+
 				<div class="modal-body">
+					<input id="editId" hidden>
 					<fieldset>
 						<div class="form-group row">
 							<label class="col-lg-2 control-label">Titel</label>
 							<div class="col-lg-10">
-								<input id="title" class="form-control"/>
+								<input id="title" class="form-control" />
 							</div>
 						</div>
 					</fieldset>
-					<br/>
-					<fieldset style="text-align: right;">
-						<button class="btn btn-primary" onclick="titleService.save()">Opret</button>
+
+					<div class="panel-body" th:if="${@OS2VikarConfiguration.syncADGroups.enabled}">
+						<fieldset>
+							<div>
+							    <p th:utext="${@cmsMessageBundle.getText('cms.titles.ad_groups.helptext')}"></p>
+
+				                <table class="table" id="groupTableLocal">
+									<thead>
+										<tr>
+											<th>Tildelt</th>
+											<th>Navn</th>
+										</tr>
+									</thead>
+								
+									<tbody>
+										<tr th:each="group : ${adGroupsAvailable}">
+											<td class="actionColumn">
+												<input class="i-checks adGroupsTitle" th:id="'groupLocal_' + ${group.objectGuid}" th:attr="data-guid=${group.objectGuid}" type="checkbox">
+											</td>
+											<td th:text="${group.name}"></td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</fieldset>
+					</div>
+
+					<fieldset style="text-align: right; margin-top: 20px;">
+						<button class="btn btn-primary" onclick="titleService.save()">Gem</button>
 					</fieldset>
 				</div>
 			</div>
 		</div>
 	</div>
 
-	<div th:replace="fragments/footer :: scripts(jstree = true, checkbox = true, datatables = true)"></div>
-	<div th:replace="system_admin/fragments/ou_description :: descriptionScript"></div>
+	<div th:replace="~{fragments/footer :: scripts(jstree = true, checkbox = true, datatables = true)}"></div>
+	<div th:replace="~{system_admin/fragments/ou_description :: descriptionScript}"></div>
 	
 	<script th:inline="javascript">
 		/*<![CDATA[*/

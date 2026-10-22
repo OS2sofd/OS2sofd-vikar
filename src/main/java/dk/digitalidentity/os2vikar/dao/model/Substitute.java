@@ -4,18 +4,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.OneToMany;
-import javax.persistence.Table;
-
 import org.hibernate.annotations.CreationTimestamp;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -86,4 +85,15 @@ public class Substitute {
 
 	@Column
 	private boolean authorizationCodeChecked;
+	
+	@Column
+	private String nexusId;
+	
+	@Column
+	private String nexusError;
+	
+	// flagged when workplaces are modified, and sync-job will flag it as handled.
+	// note that a full sync early in the morning handles future / expired workplaces
+	@Column
+	private boolean workplacesModified;
 }

@@ -1,0 +1,3 @@
+ALTER TABLE auditlog ADD COLUMN start_date VARCHAR(255) NULL;
+ALTER TABLE auditlog ADD COLUMN stop_date VARCHAR(255) NULL;
+
